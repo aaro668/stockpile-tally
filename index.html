@@ -502,7 +502,12 @@ function scanVolume(base, surf){
     return nb.length < 3 || c.h <= median(nb) + 0.5;
   });
   const cells = {size: cellsArr.length};
-  const P = poly.concat(cellsArr);
+  // the toe is ground (height 0) along its whole length, not just at the tapped corners: add a ground point
+  // every ~1 ft along each edge so walls and faces come down to the ground everywhere, with no gaps
+  const edge = [];
+  poly.forEach((A, i) => { const B = poly[(i + 1) % poly.length], n = Math.floor(Math.hypot(B.x - A.x, B.y - A.y) / 0.3);
+    for (let t = 1; t < n; t++) edge.push({x: A.x + (B.x - A.x) * t / n, y: A.y + (B.y - A.y) * t / n, h: 0}); });
+  const P = poly.concat(edge, cellsArr);
   const T = delaunay(P);
   let vol = 0, area = 0, maxH = 0; const used = [];
   for (const [i,j,k] of T){
