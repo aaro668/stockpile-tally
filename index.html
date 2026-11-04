@@ -63,15 +63,25 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .status{font-size:14px;padding:10px 12px;border-radius:6px;border-left:4px solid var(--muted);background:var(--bg)}
 .status.ok{border-left-color:var(--good)} .status.no{border-left-color:var(--bad)}
-canvas#map{width:100%;max-width:100%;aspect-ratio:1/1;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+canvas#map{width:100%;max-width:100%;aspect-ratio:1/1;background:var(--bg);border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:grab}
+.lenin{display:flex;gap:6px}
+.lenin input{flex:1;min-width:0}
+.lenin select{width:auto;flex:0 0 auto;font-family:var(--mono);font-size:15px;padding:9px 6px}
 ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .tag{display:inline-block;font:600 11px var(--body);text-transform:uppercase;letter-spacing:.8px;background:var(--accent);color:var(--accent-ink);padding:2px 6px;border-radius:3px}
 .hist{display:flex;flex-direction:column;gap:8px}
 .hist .item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
 .hist .item b{font-weight:600}
 .hist .item .n{font:500 14px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
-.hist .item .m{font-size:12px;color:var(--muted)}
-.hist .del{grid-column:2;justify-self:end;background:none;border:0;color:var(--bad);font-size:12px;cursor:pointer;padding:0}
+.hist .item .m{font-size:12px;color:var(--muted);grid-column:1/-1}
+.hist .acts{grid-column:1/-1;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.hist .acts select{width:auto;max-width:65%;font-size:13px;padding:4px 6px}
+.hist .del{background:none;border:0;color:var(--bad);font-size:12px;cursor:pointer;padding:0}
+.proj{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column}
+.proj-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+.proj-head h3{margin:0;font:700 19px var(--display);text-transform:uppercase;letter-spacing:.5px}
+.proj-tot{font:500 14px var(--mono);font-variant-numeric:tabular-nums}
+.proj .item:last-child{border-bottom:0}
 textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
 /* AR overlay */
 #arOverlay{position:fixed;inset:0;pointer-events:none;font-family:var(--body);color:#fff}
@@ -93,14 +103,10 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
 <div class="wrap">
   <header>
     <h1><span>Stockpile</span> Tally</h1>
-    <div class="units" role="group" aria-label="Units">
-      <button id="uMetric" aria-pressed="true">m / t</button>
-      <button id="uImp" aria-pressed="false">ft / ton</button>
-    </div>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button role="tab" id="tabTape" aria-selected="true">Tape</button>
+    <button role="tab" id="tabTape" aria-selected="true">Measure</button>
     <button role="tab" id="tabAR" aria-selected="false">AR scan</button>
     <button role="tab" id="tabHist" aria-selected="false">Saved</button>
   </nav>
@@ -111,7 +117,7 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
       <label>Material
         <select id="material"></select>
       </label>
-      <label><span id="densLabel">Bulk density (t/m³)</span>
+      <label><span id="densLabel">Bulk density (tons/yd³)</span>
         <input id="density" type="number" inputmode="decimal" step="0.01" min="0.1">
       </label>
     </div>
@@ -125,6 +131,7 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
       <button data-shape="cone" aria-pressed="true">Cone</button>
       <button data-shape="windrow" aria-pressed="false">Long pile</button>
       <button data-shape="flat" aria-pressed="false">Flat top</button>
+      <button data-shape="rect" aria-pressed="false">Rectangle</button>
     </div>
     <div class="diagram" id="diagram"></div>
 
@@ -136,31 +143,37 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
         </select>
       </label>
       <span></span>
-      <label id="lC">Circumference at toe <span class="u">(m)</span><input id="cC" type="number" inputmode="decimal" step="any" value="31.4"></label>
-      <label id="lO">Over the top, toe to toe <span class="u">(m)</span><input id="cO" type="number" inputmode="decimal" step="any" value="14.2"></label>
-      <label id="lD" hidden>Base diameter <span class="u">(m)</span><input id="cD" type="number" inputmode="decimal" step="any" value="10"></label>
-      <label id="lH" hidden>Height <span class="u">(m)</span><input id="cH" type="number" inputmode="decimal" step="any" value="3.2"></label>
+      <label id="lC">Circumference at toe<input id="cC" class="len" type="number" inputmode="decimal" step="any" value="100"></label>
+      <label id="lO">Over the top, toe to toe<input id="cO" class="len" type="number" inputmode="decimal" step="any" value="46"></label>
+      <label id="lD" hidden>Base diameter<input id="cD" class="len" type="number" inputmode="decimal" step="any" value="32"></label>
+      <label id="lH" hidden>Height<input id="cH" class="len" type="number" inputmode="decimal" step="any" value="10"></label>
     </div>
 
     <div id="windIn" class="grid2" hidden>
-      <label>Length, toe to toe <span class="u">(m)</span><input id="wL" type="number" inputmode="decimal" step="any" value="25"></label>
-      <label>Width, toe to toe <span class="u">(m)</span><input id="wW" type="number" inputmode="decimal" step="any" value="9"></label>
+      <label>Length, toe to toe<input id="wL" class="len" type="number" inputmode="decimal" step="any" value="80"></label>
+      <label>Width, toe to toe<input id="wW" class="len" type="number" inputmode="decimal" step="any" value="30"></label>
       <label>Height by
         <select id="windMethod">
           <option value="ott">Over the top (across width)</option>
           <option value="h">Measured height</option>
         </select>
       </label>
-      <label id="lwO">Over the top <span class="u">(m)</span><input id="wO" type="number" inputmode="decimal" step="any" value="12.5"></label>
-      <label id="lwH" hidden>Height <span class="u">(m)</span><input id="wH" type="number" inputmode="decimal" step="any" value="3.5"></label>
+      <label id="lwO">Over the top<input id="wO" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label id="lwH" hidden>Height<input id="wH" class="len" type="number" inputmode="decimal" step="any" value="11"></label>
     </div>
 
     <div id="flatIn" class="grid2" hidden>
-      <label>Base length <span class="u">(m)</span><input id="fL" type="number" inputmode="decimal" step="any" value="20"></label>
-      <label>Base width <span class="u">(m)</span><input id="fW" type="number" inputmode="decimal" step="any" value="12"></label>
-      <label>Top length <span class="u">(m)</span><input id="fl" type="number" inputmode="decimal" step="any" value="12"></label>
-      <label>Top width <span class="u">(m)</span><input id="fw" type="number" inputmode="decimal" step="any" value="4"></label>
-      <label>Height <span class="u">(m)</span><input id="fH" type="number" inputmode="decimal" step="any" value="3"></label>
+      <label>Base length<input id="fL" class="len" type="number" inputmode="decimal" step="any" value="65"></label>
+      <label>Base width<input id="fW" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label>Top length<input id="fl" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label>Top width<input id="fw" class="len" type="number" inputmode="decimal" step="any" value="13"></label>
+      <label>Height<input id="fH" class="len" type="number" inputmode="decimal" step="any" value="10"></label>
+    </div>
+
+    <div id="rectIn" class="grid2" hidden>
+      <label>Length<input id="rL" class="len" type="number" inputmode="decimal" step="any" value="50"></label>
+      <label>Width<input id="rW" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label>Height or depth<input id="rH" class="len" type="number" inputmode="decimal" step="any" value="1"></label>
     </div>
     <p class="hint" id="tapeHint">Walk a tape around the toe of the pile for the circumference, then throw it over the peak from toe to toe. No need to climb the pile.</p>
   </section>
@@ -180,18 +193,19 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
       <button class="btn ghost" id="arDemo">Load sample scan</button>
     </div>
     <div id="arResultBox" hidden>
-      <div class="row" style="justify-content:space-between"><h2>Height map</h2><span class="tag" id="sampleTag" hidden>Sample data</span></div>
-      <canvas id="map" width="600" height="600" aria-label="Top-down height map of scanned pile"></canvas>
+      <div class="row" style="justify-content:space-between"><h2>3D view</h2><span class="tag" id="sampleTag" hidden>Sample data</span></div>
+      <canvas id="map" width="600" height="600" aria-label="Rotatable 3D model of the scanned pile"></canvas>
+      <p class="hint">Drag to rotate, pinch or scroll to zoom, double-tap to reset.</p>
       <p class="hint" id="scanStats"></p>
       <div id="scaleBox" class="panel" style="padding:12px;gap:8px">
         <h2>Scale check</h2>
         <p class="hint" id="scaleInfo"></p>
-        <label>Tape distance between the two scale points <span class="u">(m)</span>
-          <input id="refDist" type="number" inputmode="decimal" step="any" placeholder="e.g. 10">
+        <label>Tape distance between the two scale points
+          <input id="refDist" class="len" type="number" inputmode="decimal" step="any" placeholder="e.g. 25">
         </label>
       </div>
     </div>
-    <p class="hint">Works on ARCore phones in Chrome. Best for piles up to about 6 m tall in daylight; the camera can't see the top of very tall piles from the ground, so those come out low. Use a drone survey for large piles.</p>
+    <p class="hint">Works on ARCore phones in Chrome. Best for piles up to about 20 ft tall in daylight; the camera can't see the top of very tall piles from the ground, so those come out low. Use a drone survey for large piles.</p>
   </section>
 
   <!-- RESULT -->
@@ -203,13 +217,14 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
     <div class="sub" id="rSub"></div>
     <div class="sub err" id="rErr" hidden></div>
     <div class="row">
-      <input id="pileName" type="text" placeholder="Pile name, e.g. North yard 3/4 clear" style="flex:1;min-width:180px;font-family:var(--body);font-size:15px">
+      <input id="pileName" type="text" placeholder="Pile name, e.g. North yard 3/4 clear" style="flex:1 1 100%;min-width:0;font-family:var(--body);font-size:15px">
+      <select id="projSel" aria-label="Project" style="flex:1;min-width:0"></select>
       <button class="btn" id="saveBtn">Save</button>
     </div>
     <details>
       <summary class="sub" style="cursor:pointer">Calibrate density from a scale ticket</summary>
       <div class="row" style="margin-top:8px">
-        <input id="actualTons" type="number" inputmode="decimal" step="any" placeholder="Weighed tonnes" style="flex:1">
+        <input id="actualTons" type="number" inputmode="decimal" step="any" placeholder="Weighed tons" style="flex:1">
         <button class="btn" id="calBtn">Calibrate</button>
       </div>
       <p class="sub" id="calMsg"></p>
@@ -218,7 +233,15 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
 
   <!-- HISTORY -->
   <section id="viewHist" class="panel" hidden>
-    <h2>Saved estimates</h2>
+    <div class="row" style="justify-content:space-between">
+      <h2>Saved estimates</h2>
+      <button class="btn" id="newProjBtn">New project</button>
+    </div>
+    <form id="newProjForm" class="row" hidden>
+      <input id="newProjName" type="text" placeholder="Project name, e.g. Smith driveway" style="flex:1;min-width:0;font-family:var(--body);font-size:15px">
+      <button class="btn" type="submit">Create</button>
+      <button class="btn ghost" type="button" id="newProjCancel">Cancel</button>
+    </form>
     <div class="hist" id="histList"></div>
     <div class="row">
       <button class="btn ghost" id="copyCsv">Copy as CSV</button>
@@ -255,8 +278,20 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 };
-let imperial = store.get('sp.imperial', false);
 const $ = id => document.getElementById(id);
+// every length box gets its own ft / in picker (ft default); values are converted when the unit changes
+document.querySelectorAll('input.len').forEach(inp => {
+  const w = document.createElement('div'); w.className = 'lenin';
+  inp.replaceWith(w); w.appendChild(inp);
+  const s = document.createElement('select'); s.id = inp.id + 'U'; s.setAttribute('aria-label', 'Unit');
+  s.innerHTML = '<option value="ft">ft</option><option value="in">in</option>';
+  s.addEventListener('change', () => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v)) inp.value = +(s.value === 'in' ? v * 12 : v / 12).toFixed(2);
+    render();
+  });
+  w.appendChild(s);
+});
 
 // Typical loose bulk densities, tonnes per cubic metre
 const MATERIALS = [
@@ -280,12 +315,12 @@ function baseDensity(k){ return calibrated[k] ?? MATERIALS.find(m => m[0] === k)
 function densityT_m3(){
   const v = parseFloat($('density').value);
   if (!(v > 0)) return NaN;
-  return imperial ? v * SHORT_TON / YD3 : v;           // imperial input is short tons / yd³
+  return v * SHORT_TON / YD3;                          // input is short tons / yd³
 }
 function showDensity(){
   const d = baseDensity(matSel.value);
-  $('density').value = (imperial ? d * YD3 / SHORT_TON : d).toFixed(2);
-  $('densLabel').textContent = (imperial ? 'Bulk density (ton/yd³)' : 'Bulk density (t/m³)') + (calibrated[matSel.value] ? ' · calibrated' : '');
+  $('density').value = (d * YD3 / SHORT_TON).toFixed(2);
+  $('densLabel').textContent = 'Bulk density (tons/yd³)' + (calibrated[matSel.value] ? ' · calibrated' : '');
 }
 matSel.addEventListener('change', () => { store.set('sp.mat', matSel.value); showDensity(); render(); });
 $('density').addEventListener('input', render);
@@ -317,6 +352,9 @@ const Tape = {
     if (l > L || w > W) throw 'Top must be smaller than the base.';
     const A1 = L * W, A2 = l * w, Am = ((L + l) / 2) * ((W + w) / 2);
     return { vol: H / 6 * (A1 + A2 + 4 * Am), info: `base ${fmtArea(A1)} · top ${fmtArea(A2)}` };   // prismoidal formula
+  },
+  rect({L, W, H}){
+    return { vol: L * W * H, info: `area ${fmtArea(L * W)} · depth ${fmtLen(H)}` };
   }
 };
 
@@ -398,9 +436,8 @@ function scanVolume(base, surf){
 
 // ---------- formatting ----------
 const nf = (v, d=1) => v.toLocaleString(undefined, {minimumFractionDigits:d, maximumFractionDigits:d});
-const fmtLen = m => imperial ? nf(m/FT) + ' ft' : nf(m, 2) + ' m';
-const fmtArea = a => imperial ? nf(a/(FT*FT), 0) + ' ft²' : nf(a, 1) + ' m²';
-const toM = v => imperial ? v * FT : v;
+const fmtLen = m => { const f = m / FT; return f < 2 ? nf(f * 12, 1) + ' in' : nf(f, 1) + ' ft'; };
+const fmtArea = a => nf(a / (FT * FT), 0) + ' ft²';
 
 // ---------- UI state ----------
 let mode = 'tape', shape = 'cone', scan = null, scanIsSample = false, current = null;
@@ -408,18 +445,20 @@ let mode = 'tape', shape = 'cone', scan = null, scanIsSample = false, current = 
 const DIAGRAMS = {
   cone: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L140 20 L260 100" fill="var(--bg)"/><ellipse cx="140" cy="100" rx="120" ry="12" stroke-dasharray="5 4"/><path d="M20 100 L140 20 L260 100" stroke="var(--accent)" stroke-width="3"/><text x="140" y="14" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">over the top</text><text x="140" y="119" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">circumference at toe</text></svg>`,
   windrow: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 95 Q40 30 80 30 L200 30 Q240 30 260 95 Z" fill="var(--bg)"/><path d="M20 108 H260" stroke="var(--accent)" stroke-width="3"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">length (toe to toe)</text><text x="140" y="70" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">ridge</text></svg>`,
-  flat: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L80 30 L200 30 L260 100 Z" fill="var(--bg)"/><path d="M80 30 H200" stroke="var(--accent)" stroke-width="3"/><path d="M20 100 H260" stroke="var(--accent)" stroke-width="3"/><path d="M140 30 V100" stroke-dasharray="4 4"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">top length × width</text><text x="148" y="70" fill="currentColor" stroke="none" font-size="11">height</text><text x="140" y="116" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">base length × width</text></svg>`
+  flat: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L80 30 L200 30 L260 100 Z" fill="var(--bg)"/><path d="M80 30 H200" stroke="var(--accent)" stroke-width="3"/><path d="M20 100 H260" stroke="var(--accent)" stroke-width="3"/><path d="M140 30 V100" stroke-dasharray="4 4"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">top length × width</text><text x="148" y="70" fill="currentColor" stroke="none" font-size="11">height</text><text x="140" y="116" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">base length × width</text></svg>`,
+  rect: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M40 70 L90 40 L250 40 L200 70 Z" fill="var(--bg)"/><path d="M40 70 V95 H200 V70 M200 95 L250 65 V40" fill="var(--bg)"/><path d="M40 70 H200 L250 40" stroke="var(--accent)" stroke-width="3"/><text x="120" y="112" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">length</text><text x="250" y="85" fill="currentColor" stroke="none" font-size="11">width</text><text x="34" y="86" fill="currentColor" stroke="none" font-size="11" text-anchor="end">depth</text></svg>`
 };
 const HINTS = {
   cone: 'Walk a tape around the toe of the pile for the circumference, then throw it over the peak from toe to toe. No need to climb the pile.',
   windrow: 'Measure length and width at the toe. For height, throw a tape over the ridge from toe to toe across the width.',
-  flat: 'For dozed or bin-shaped piles with a flat top. Measure the toe rectangle and the flat top, plus the height.'
+  flat: 'For dozed or bin-shaped piles with a flat top. Measure the toe rectangle and the flat top, plus the height.',
+  rect: 'Straight box: length × width × depth. Use it to work out material needed to cover an area, e.g. a yard at 1 ft deep (switch depth to inches for 4 in, 6 in, etc.).'
 };
 
 function setShape(s){
   shape = s;
   document.querySelectorAll('[data-shape]').forEach(b => b.setAttribute('aria-pressed', b.dataset.shape === s));
-  $('coneIn').hidden = s !== 'cone'; $('windIn').hidden = s !== 'windrow'; $('flatIn').hidden = s !== 'flat';
+  $('coneIn').hidden = s !== 'cone'; $('windIn').hidden = s !== 'windrow'; $('flatIn').hidden = s !== 'flat'; $('rectIn').hidden = s !== 'rect';
   $('diagram').innerHTML = DIAGRAMS[s]; $('tapeHint').textContent = HINTS[s];
   render();
 }
@@ -445,18 +484,8 @@ function setTab(t){
 }
 $('tabTape').onclick = () => setTab('tape'); $('tabAR').onclick = () => setTab('ar'); $('tabHist').onclick = () => setTab('hist');
 
-function setUnits(imp){
-  // convert lengths already typed so the pile stays the same size
-  const f = imp === imperial ? 1 : (imp ? 1/FT : FT);
-  document.querySelectorAll('#viewTape input, #refDist').forEach(i => { const v = parseFloat(i.value); if (!isNaN(v)) i.value = +(v*f).toFixed(2); });
-  imperial = imp; store.set('sp.imperial', imp);
-  $('uMetric').setAttribute('aria-pressed', !imp); $('uImp').setAttribute('aria-pressed', imp);
-  document.querySelectorAll('.u').forEach(s => s.textContent = imp ? '(ft)' : '(m)');
-  showDensity(); render();
-}
-$('uMetric').onclick = () => setUnits(false); $('uImp').onclick = () => setUnits(true);
-
-const num = id => toM(parseFloat($(id).value));
+// length input -> metres (maths runs in metres internally)
+const num = id => { const u = $(id + 'U'); return parseFloat($(id).value) * (u && u.value === 'in' ? 1 / 12 : 1) * FT; };
 function render(){
   if (mode === 'hist') return;
   const err = $('rErr'); err.hidden = true; current = null;
@@ -467,7 +496,8 @@ function render(){
       if (shape === 'cone') r = Tape.cone({method:$('coneMethod').value, C:num('cC'), O:num('cO'), D:num('cD'), H:num('cH')});
       if (shape === 'windrow') r = Tape.windrow({L:num('wL'), W:num('wW'), method:$('windMethod').value, O:num('wO'), H:num('wH')});
       if (shape === 'flat') r = Tape.flat({L:num('fL'), W:num('fW'), l:num('fl'), w:num('fw'), H:num('fH')});
-      vol = r.vol; info = r.info; method = {cone:'Tape · cone', windrow:'Tape · long pile', flat:'Tape · flat top'}[shape];
+      if (shape === 'rect') r = Tape.rect({L:num('rL'), W:num('rW'), H:num('rH')});
+      vol = r.vol; info = r.info; method = {cone:'Measure · cone', windrow:'Measure · long pile', flat:'Measure · flat top', rect:'Measure · rectangle'}[shape];
       if (!isFinite(vol) || vol <= 0) throw 'Fill in every measurement.';
     } else {
       if (!scan) throw 'No scan yet. Start an AR scan or load the sample.';
@@ -495,81 +525,172 @@ function render(){
   }
   const dens = densityT_m3(), tons = vol * dens;
   current = {vol, tons, dens, method, info};
-  if (imperial){
-    $('rVol').innerHTML = nf(vol/YD3, 0) + '<small>yd³</small>';
-    $('rTon').innerHTML = isFinite(tons) ? nf(tons/SHORT_TON, 0) + '<small>tons</small>' : '—';
-    $('rSub').textContent = `${nf(vol, 1)} m³ · ${isFinite(tons) ? nf(tons, 1) + ' t' : ''} · ${info}`;
-  } else {
-    $('rVol').innerHTML = nf(vol, 1) + '<small>m³</small>';
-    $('rTon').innerHTML = isFinite(tons) ? nf(tons, 1) + '<small>t</small>' : '—';
-    $('rSub').textContent = `${nf(vol/YD3, 0)} yd³ · ${isFinite(tons) ? nf(tons/SHORT_TON, 0) + ' short tons' : ''} · ${info}`;
-  }
+  const yd = vol / YD3, st = tons / SHORT_TON, d = v => v < 100 ? 1 : 0;
+  $('rVol').innerHTML = nf(yd, d(yd)) + '<small>yd³</small>';
+  $('rTon').innerHTML = isFinite(st) ? nf(st, d(st)) + '<small>tons</small>' : '—';
+  $('rSub').textContent = `${nf(vol / FT ** 3, 0)} ft³ · ${info}`;
 }
 
 // ---------- calibrate & save ----------
 $('calBtn').onclick = () => {
   const t = parseFloat($('actualTons').value);
   if (!current || !(t > 0)){ $('calMsg').textContent = 'Enter the weighed amount for the pile measured above.'; return; }
-  const tonnes = imperial ? t * SHORT_TON : t, d = tonnes / current.vol;
+  const d = t * SHORT_TON / current.vol;
   calibrated[matSel.value] = +d.toFixed(3); store.set('sp.cal', calibrated);
-  $('calMsg').textContent = `Saved ${nf(d, 2)} t/m³ for ${matSel.selectedOptions[0].text}.`;
+  $('calMsg').textContent = `Saved ${nf(d * YD3 / SHORT_TON, 2)} tons/yd³ for ${matSel.selectedOptions[0].text}.`;
   showDensity(); render();
 };
 let hist = store.get('sp.hist', []);
+let projects = store.get('sp.projects', []);            // [{id, name}]
+function fillProjSelect(sel, val){
+  sel.innerHTML = '';
+  [{id: '', name: 'No project'}].concat(projects).forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o);
+  });
+  sel.value = projects.some(p => p.id === val) ? val : '';
+}
+function refreshProjSel(){ fillProjSelect($('projSel'), store.get('sp.lastProj', '')); }
+$('projSel').addEventListener('change', () => store.set('sp.lastProj', $('projSel').value));
+$('newProjBtn').onclick = () => { $('newProjForm').hidden = false; $('newProjName').focus(); };
+$('newProjCancel').onclick = () => { $('newProjForm').hidden = true; $('newProjName').value = ''; };
+$('newProjForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('newProjName').value.trim(); if (!name) return;
+  const p = {id: 'p' + Date.now().toString(36), name};
+  projects.push(p); store.set('sp.projects', projects); store.set('sp.lastProj', p.id);
+  $('newProjName').value = ''; $('newProjForm').hidden = true; refreshProjSel(); renderHist();
+});
 $('saveBtn').onclick = () => {
   if (!current) return;
-  hist.unshift({ when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile',
+  hist.unshift({ when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile', project: $('projSel').value,
     material: matSel.selectedOptions[0].text, method: current.method, m3: +current.vol.toFixed(2),
     dens: +current.dens.toFixed(3), t: +current.tons.toFixed(2), info: current.info });
   store.set('sp.hist', hist);
   $('saveBtn').textContent = 'Saved'; setTimeout(() => $('saveBtn').textContent = 'Save', 1500);
 };
+const projName = id => (projects.find(p => p.id === id) || {name: ''}).name;
 function renderHist(){
   const L = $('histList'); L.innerHTML = '';
-  if (!hist.length){ L.innerHTML = '<p class="hint">Nothing saved yet. Measure a pile and tap Save.</p>'; return; }
-  hist.forEach((h, i) => {
-    const d = document.createElement('div'); d.className = 'item';
-    const v = imperial ? `${nf(h.m3/YD3,0)} yd³ · ${nf(h.t/SHORT_TON,0)} tons` : `${nf(h.m3,1)} m³ · ${nf(h.t,1)} t`;
-    d.innerHTML = `<b></b><span class="n">${v}</span><span class="m"></span><button class="del">Delete</button>`;
-    d.querySelector('b').textContent = h.name;
-    d.querySelector('.m').textContent = `${new Date(h.when).toLocaleString()} · ${h.material} · ${h.method}`;
-    d.querySelector('.del').onclick = () => { hist.splice(i, 1); store.set('sp.hist', hist); renderHist(); };
-    L.appendChild(d);
+  if (!hist.length && !projects.length){ L.innerHTML = '<p class="hint">Nothing saved yet. Create a project, then measure a pile and tap Save.</p>'; return; }
+  const valid = id => projects.some(p => p.id === id) ? id : '';
+  const groups = projects.map(p => ({...p, items: hist.filter(h => valid(h.project) === p.id)}));
+  const loose = hist.filter(h => !valid(h.project));
+  if (loose.length) groups.push({id: '', name: 'No project', items: loose});
+  groups.forEach(gp => {
+    const box = document.createElement('section'); box.className = 'proj';
+    const m3 = gp.items.reduce((s, h) => s + h.m3, 0), t = gp.items.reduce((s, h) => s + h.t, 0);
+    box.innerHTML = `<div class="proj-head"><h3></h3><span class="proj-tot"></span></div>`;
+    box.querySelector('h3').textContent = gp.name;
+    box.querySelector('.proj-tot').textContent = gp.items.length
+      ? `${gp.items.length} pile${gp.items.length > 1 ? 's' : ''} · ${nf(m3/YD3,1)} yd³ · ${nf(t/SHORT_TON,1)} tons` : 'No piles yet';
+    gp.items.forEach(h => {
+      const d = document.createElement('div'); d.className = 'item';
+      d.innerHTML = `<b></b><span class="n">${nf(h.m3/YD3,1)} yd³ · ${nf(h.t/SHORT_TON,1)} tons</span><span class="m"></span>
+        <div class="acts"><select aria-label="Move to project"></select><button class="del">Delete</button></div>`;
+      d.querySelector('b').textContent = h.name;
+      d.querySelector('.m').textContent = `${new Date(h.when).toLocaleString()} · ${h.material} · ${h.method}`;
+      const sel = d.querySelector('select'); fillProjSelect(sel, valid(h.project));
+      sel.onchange = () => { h.project = sel.value; store.set('sp.hist', hist); renderHist(); };
+      const del = d.querySelector('.del');
+      del.onclick = () => {
+        if (del.dataset.armed){ hist.splice(hist.indexOf(h), 1); store.set('sp.hist', hist); renderHist(); }
+        else { del.dataset.armed = 1; del.textContent = 'Tap again to delete'; }
+      };
+      box.appendChild(d);
+    });
+    if (gp.id){
+      const del = document.createElement('button'); del.className = 'del'; del.style.alignSelf = 'flex-end'; del.style.marginTop = '8px';
+      del.textContent = 'Delete project';
+      del.onclick = () => {
+        if (!del.dataset.armed){ del.dataset.armed = 1; del.textContent = 'Tap again. Its piles move to No project'; return; }
+        projects = projects.filter(p => p.id !== gp.id); store.set('sp.projects', projects);
+        hist.forEach(h => { if (h.project === gp.id) h.project = ''; }); store.set('sp.hist', hist);
+        refreshProjSel(); renderHist();
+      };
+      box.appendChild(del);
+    }
+    L.appendChild(box);
   });
 }
 $('copyCsv').onclick = async () => {
   const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-  const csv = ['date,name,material,method,volume_m3,volume_yd3,density_t_m3,tonnes,short_tons']
-    .concat(hist.map(h => [h.when, q(h.name), q(h.material), q(h.method), h.m3, (h.m3/YD3).toFixed(1), h.dens, h.t, (h.t/SHORT_TON).toFixed(1)].join(','))).join('\n');
+  const csv = ['date,project,name,material,method,volume_yd3,density_tons_yd3,tons']
+    .concat(hist.map(h => [h.when, q(projName(h.project)), q(h.name), q(h.material), q(h.method), (h.m3/YD3).toFixed(1), (h.dens*YD3/SHORT_TON).toFixed(2), (h.t/SHORT_TON).toFixed(1)].join(','))).join('\n');
   const ta = $('csvOut'); ta.value = csv; ta.hidden = false;
   try { await navigator.clipboard.writeText(csv); $('copyCsv').textContent = 'Copied'; }
   catch(e){ ta.select(); $('copyCsv').textContent = 'Select and copy below'; }
 };
 
-// ---------- height map ----------
+// ---------- 3D view: shaded surface, painter's algorithm on a 2D canvas ----------
+const VIEW0 = {yaw: -0.7, pitch: 0.55, zoom: 1};
+const view3d = {...VIEW0, r: null};
 function drawMap(r){
+  if (r) view3d.r = r; r = view3d.r; if (!r) return;
   $('arResultBox').hidden = false; $('sampleTag').hidden = !scanIsSample;
-  const cv = $('map'), g = cv.getContext('2d'), S = cv.width, cs = getComputedStyle(document.documentElement);
+  const cv = $('map'), dpr = window.devicePixelRatio || 1;
+  const Wpx = Math.round(Math.max(240, cv.clientWidth) * dpr);
+  if (cv.width !== Wpx){ cv.width = Wpx; cv.height = Wpx; }
+  const g = cv.getContext('2d'), S = cv.width, cs = getComputedStyle(document.documentElement);
   g.clearRect(0, 0, S, S);
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  r.poly.forEach(p => { minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); });
-  const span = Math.max(maxX-minX, maxY-minY) || 1, sc = (S - 60) / span;
-  const X = x => 30 + (x - minX) * sc + ((span - (maxX-minX)) * sc) / 2, Y = y => 30 + (y - minY) * sc + ((span - (maxY-minY)) * sc) / 2;
-  const ramp = t => `hsl(${210 - 170 * t} 70% ${35 + 20 * t}%)`;   // low blue → high amber
-  for (const [A,B,C] of r.tris){
-    const t = ((A.h+B.h+C.h)/3) / (r.maxH || 1);
-    g.fillStyle = ramp(t); g.strokeStyle = ramp(t);
-    g.beginPath(); g.moveTo(X(A.x),Y(A.y)); g.lineTo(X(B.x),Y(B.y)); g.lineTo(X(C.x),Y(C.y)); g.closePath(); g.fill(); g.stroke();
+  let cx = 0, cy = 0; r.poly.forEach(p => { cx += p.x; cy += p.y; }); cx /= r.poly.length; cy /= r.poly.length;
+  let span = 0; r.poly.forEach(p => span = Math.max(span, Math.hypot(p.x - cx, p.y - cy)));
+  const sc = S * 0.4 / (span || 1) * view3d.zoom;
+  const cyw = Math.cos(view3d.yaw), syw = Math.sin(view3d.yaw), cp = Math.cos(view3d.pitch), sp = Math.sin(view3d.pitch);
+  // world (x, y = plan, h = up) -> [screenX, screenY, depth]; larger depth = nearer the viewer
+  const P = (x, y, h) => {
+    const dx = x - cx, dz = y - cy, x1 = dx * cyw - dz * syw, z1 = dx * syw + dz * cyw;
+    return [S / 2 + x1 * sc, S * 0.58 - (h * cp - z1 * sp) * sc, h * sp + z1 * cp];
+  };
+  const path = pts => { g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); };
+  // ground footprint
+  g.fillStyle = cs.getPropertyValue('--line'); path(r.poly.map(p => P(p.x, p.y, 0))); g.fill();
+  // shaded faces, far to near
+  const Lx = -0.4, Ly = -0.45, Lh = 0.8, Ln = Math.hypot(Lx, Ly, Lh);
+  const faces = r.tris.map(([A, B, C]) => {
+    const ux = B.x - A.x, uy = B.y - A.y, uh = B.h - A.h, vx = C.x - A.x, vy = C.y - A.y, vh = C.h - A.h;
+    let nx = uy * vh - uh * vy, ny = uh * vx - ux * vh, nh = ux * vy - uy * vx;
+    if (nh < 0){ nx = -nx; ny = -ny; nh = -nh; }
+    const lit = Math.max(0, (nx * Lx + ny * Ly + nh * Lh) / (Math.hypot(nx, ny, nh) * Ln || 1));
+    const t = ((A.h + B.h + C.h) / 3) / (r.maxH || 1);
+    const pa = P(A.x, A.y, A.h), pb = P(B.x, B.y, B.h), pc = P(C.x, C.y, C.h);
+    return {pts: [pa, pb, pc], z: (pa[2] + pb[2] + pc[2]) / 3, col: `hsl(${210 - 170 * t} 60% ${18 + 42 * lit + 8 * t}%)`};
+  }).sort((a, b) => a.z - b.z);
+  g.lineWidth = 1;
+  for (const f of faces){ g.fillStyle = g.strokeStyle = f.col; path(f.pts); g.fill(); g.stroke(); }
+  // toe outline and peak marker
+  g.strokeStyle = cs.getPropertyValue('--ink'); g.lineWidth = 2 * dpr; path(r.poly.map(p => P(p.x, p.y, 0))); g.stroke();
+  let top = null; r.tris.forEach(t => t.forEach(p => { if (!top || p.h > top.h) top = p; }));
+  if (top){
+    const q = P(top.x, top.y, top.h), q0 = P(top.x, top.y, 0);
+    g.setLineDash([4 * dpr, 4 * dpr]); g.beginPath(); g.moveTo(q0[0], q0[1]); g.lineTo(q[0], q[1]); g.stroke(); g.setLineDash([]);
+    g.fillStyle = cs.getPropertyValue('--ink'); g.font = `600 ${13 * dpr}px IBM Plex Sans, sans-serif`;
+    g.fillText('peak ' + fmtLen(top.h), q[0] + 8 * dpr, q[1] - 6 * dpr);
   }
-  g.strokeStyle = cs.getPropertyValue('--ink'); g.lineWidth = 2; g.beginPath();
-  r.poly.forEach((p,i) => i ? g.lineTo(X(p.x),Y(p.y)) : g.moveTo(X(p.x),Y(p.y))); g.closePath(); g.stroke();
-  g.fillStyle = cs.getPropertyValue('--ink');
-  r.poly.forEach(p => { g.beginPath(); g.arc(X(p.x),Y(p.y),4,0,7); g.fill(); });
-  // scale bar
-  const bar = imperial ? 10*FT : 2, px = bar * sc;
-  g.fillRect(30, S - 18, px, 4); g.font = '600 14px IBM Plex Sans, sans-serif';
-  g.fillText(imperial ? '10 ft' : '2 m', 36 + px, S - 12);
 }
+(function wire3D(){
+  const cv = $('map'), pts = new Map(); let pinch0 = 0, zoom0 = 1, lastTap = 0;
+  const clampZ = z => Math.min(5, Math.max(0.4, z));
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2){ const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); zoom0 = view3d.zoom; }
+    if (pts.size === 1){ const now = Date.now(); if (now - lastTap < 300){ Object.assign(view3d, VIEW0); drawMap(); } lastTap = now; }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 1){
+      view3d.yaw += (e.clientX - prev[0]) * 0.012;
+      view3d.pitch = Math.min(1.55, Math.max(0.05, view3d.pitch + (e.clientY - prev[1]) * 0.01));
+    } else if (pts.size === 2 && pinch0){
+      const [a, b] = [...pts.values()]; view3d.zoom = clampZ(zoom0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0);
+    }
+    drawMap();
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch0 = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); view3d.zoom = clampZ(view3d.zoom * Math.exp(-e.deltaY * 0.0015)); drawMap(); }, {passive: false});
+  window.addEventListener('resize', () => { if (mode === 'ar') drawMap(); });
+})();
 
 // ---------- sample scan (synthetic, irregular pile on sloping ground) ----------
 function sampleScan(){
@@ -586,7 +707,7 @@ function sampleScan(){
   const drift = 1.03, D = pts => pts.map(p => p.map(v => v * drift));
   return {base: D(base), surf: D(surf), ref: D([[-2.5, tilt(-2.5,-4), -4], [2.5, tilt(2.5,-4), -4]])};
 }
-$('arDemo').onclick = () => { scan = sampleScan(); scanIsSample = true; $('refDist').value = imperial ? +(5/FT).toFixed(2) : 5; render(); };
+$('arDemo').onclick = () => { scan = sampleScan(); scanIsSample = true; $('refDistU').value = 'ft'; $('refDist').value = 16.4; Object.assign(view3d, VIEW0); render(); };
 
 // ---------- WebXR walk-around scan ----------
 let xr = null;
@@ -698,7 +819,7 @@ $('arStart').onclick = async () => {
 
 // ---------- boot ----------
 window.StockpileMath = {Tape, scanVolume, sampleScan};   // exposed for testing
-setUnits(imperial); setShape('cone');
+showDensity(); refreshProjSel(); setShape('cone');
 </script>
 
 </body>
