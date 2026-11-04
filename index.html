@@ -94,6 +94,7 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
 #arOverlay .cross{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
 #arOverlay .cross.hit{border-color:#f2b705}
 #arOverlay .cross::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;background:currentColor;border-radius:50%}
+#aimTxt{position:absolute;left:0;right:0;top:calc(50% + 30px);text-align:center;font:600 14px var(--mono);color:#fff;text-shadow:0 0 3px #000,0 0 6px #000}
 #arTop{position:absolute;top:0;left:0;right:0;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;background:rgba(20,25,29,.78);font-size:15px}
 #arTop b{font-family:var(--display);font-size:22px;text-transform:uppercase;letter-spacing:.5px;display:block;color:#f2b705}
 #arBottom{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(20,25,29,.78);display:flex;flex-direction:column;gap:10px;pointer-events:auto}
@@ -288,6 +289,7 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
 <div id="arOverlay" hidden>
   <canvas id="arCanvas"></canvas>
   <div class="cross" id="cross"></div>
+  <div id="aimTxt"></div>
   <div id="arTop"><b id="arPhase">Step 1 · Toe</b><span id="arMsg">Aim the circle at the toe of the pile and tap the screen.</span></div>
   <div id="arBottom">
     <div class="meta" id="arMeta">Toe points 0 · Surface points 0</div>
@@ -913,6 +915,9 @@ $('arStart').onclick = async () => {
   let hts;
   try { hts = await session.requestHitTestSource({space: viewer, entityTypes: ['point', 'plane']}); }
   catch(e){ hts = await session.requestHitTestSource({space: viewer}); }
+  // toe and scale points sit on the ground, so aim those at detected floor planes first
+  let htsPlane = null;
+  try { htsPlane = await session.requestHitTestSource({space: viewer, entityTypes: ['plane']}); } catch(e){}
 
   xr = {session, phase: 'toe', prev: 'toe', base: [], surf: [], ref: [], cams: [], tick: 0, sweep: false, hit: null, frameN: 0,
         depth: !!(session.enabledFeatures && session.enabledFeatures.includes('depth-sensing') && session.depthUsage === 'cpu-optimized')};
@@ -978,28 +983,46 @@ $('arStart').onclick = async () => {
     gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
     const pose = f.getViewerPose(refSpace); if (!pose) return;
     if (++xr.tick % 15 === 0){ const q = pose.transform.position; xr.cams.push([q.x, q.y, q.z]); }   // phone path, for diagnosing scans
-    const hits = f.getHitTestResults(hts);
-    xr.hit = null;
-    if (hits.length){ const hp = hits[0].getPose(refSpace); if (hp){ const q = hp.transform.position; xr.hit = [q.x, q.y, q.z]; } }
-    $('cross').classList.toggle('hit', !!xr.hit);
+    // depth sensor reading at a screen spot (normalized 0–1, top-left origin) -> world point, or null on an edge / no data
+    const view0 = pose.views[0];
+    let di = null;
+    if (xr.depth){ try { di = f.getDepthInformation(view0); } catch(e){ xr.depth = false; } }
+    const depthAt = (nx, ny) => {
+      if (!di) return null;
+      const d = di.getDepthInMeters(nx, ny);
+      if (!(d > 0.3 && d < 6)) return null;
+      // skip readings on an edge (e.g. a wall against the background): the sensor blends the two depths there
+      const e = 0.012, lim = 0.04 * d + 0.03;
+      const nb = [di.getDepthInMeters(nx + e, ny), di.getDepthInMeters(nx - e, ny), di.getDepthInMeters(nx, ny + e), di.getDepthInMeters(nx, ny - e)];
+      if (nb.some(v => !(v > 0) || Math.abs(v - d) > lim)) return null;
+      const P = view0.projectionMatrix, M = view0.transform.matrix;
+      const x = (nx * 2 - 1 + P[8]) * d / P[0], y = (1 - ny * 2 + P[9]) * d / P[5], z = -d;
+      return [M[0]*x + M[4]*y + M[8]*z + M[12], M[1]*x + M[5]*y + M[9]*z + M[13], M[2]*x + M[6]*y + M[10]*z + M[14]];
+    };
+    const firstHit = src => {
+      if (!src) return null;
+      const r = f.getHitTestResults(src); if (!r.length) return null;
+      const hp = r[0].getPose(refSpace); if (!hp) return null;
+      const q = hp.transform.position; return [q.x, q.y, q.z];
+    };
+    // surface: depth sensor first (feature points snap to texture behind plain panels).
+    // toe and scale: detected floor first. Feature points are the fallback for both.
+    let hit = null, how = '';
+    if (xr.phase === 'surf'){ hit = depthAt(0.5, 0.5); if (hit) how = 'depth'; }
+    else { hit = firstHit(htsPlane); if (hit) how = 'floor'; }
+    if (!hit){ hit = firstHit(hts); if (hit) how = 'feature pt'; }
+    xr.hit = hit;
+    $('cross').classList.toggle('hit', !!hit);
+    if (hit){
+      const c = pose.transform.position;
+      $('aimTxt').textContent = fmtLen(Math.hypot(hit[0] - c.x, hit[1] - c.y, hit[2] - c.z)) + ' · ' + how;
+    } else $('aimTxt').textContent = 'no reading';
     if (xr.sweep && xr.phase === 'surf' && xr.surf.length < 8000 && ++xr.frameN % 2 === 0){
-      if (xr.depth){
-        // depth sensor: sample a 9×9 grid over the middle of the screen and turn each depth into a world point
+      if (di){
+        // depth sensor: sample a 9×9 grid over the middle of the screen
         try {
-          const v = pose.views[0], di = f.getDepthInformation(v);
-          if (di){
-            const P = v.projectionMatrix, M = v.transform.matrix;
-            for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++){
-              const nx = 0.15 + 0.7 * i / 8, ny = 0.15 + 0.7 * j / 8, d = di.getDepthInMeters(nx, ny);
-              if (!(d > 0.3 && d < 6)) continue;
-              // skip readings on an edge (e.g. bin wall against the background): the sensor blends the two
-              // depths there and makes points float in mid-air
-              const e = 0.012, lim = 0.04 * d + 0.03;
-              const nb = [di.getDepthInMeters(nx + e, ny), di.getDepthInMeters(nx - e, ny), di.getDepthInMeters(nx, ny + e), di.getDepthInMeters(nx, ny - e)];
-              if (nb.some(v => !(v > 0) || Math.abs(v - d) > lim)) continue;
-              const x = (nx * 2 - 1 + P[8]) * d / P[0], y = (1 - ny * 2 + P[9]) * d / P[5], z = -d;
-              acceptSurf([M[0]*x + M[4]*y + M[8]*z + M[12], M[1]*x + M[5]*y + M[9]*z + M[13], M[2]*x + M[6]*y + M[10]*z + M[14]]);
-            }
+          for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++){
+            const p = depthAt(0.15 + 0.7 * i / 8, 0.15 + 0.7 * j / 8); if (p) acceptSurf(p);
           }
         } catch(e){ xr.depth = false; }
       } else if (xr.hit) acceptSurf(xr.hit);
