@@ -188,8 +188,8 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
     <h2>Walk-around scan</h2>
     <div id="arSupport" class="status">Checking whether this phone supports AR…</div>
     <ol class="steps">
-      <li><b>Toe:</b> walk around the pile and tap where it meets the ground, every few metres (8+ taps).</li>
-      <li><b>Surface:</b> turn on Sweep and slowly pan the camera up and over every face you can see.</li>
+      <li><b>Toe:</b> walk around the pile and tap where it meets the ground, every 5–10 ft (8+ taps, all the way round).</li>
+      <li><b>Surface:</b> tap Next, turn on Sweep, and walk slowly around the pile 6–15 ft back, aiming at the faces and the top. Only points inside the toe outline and above the ground are kept. Tap Clear to start the surface again.</li>
       <li><b>Scale check (optional):</b> lay a tape on the ground, tap Scale points, then tap both ends. Enter the tape distance after the scan to correct tracking drift.</li>
       <li><b>Finish:</b> the app fits the ground, builds a surface and integrates the volume.</li>
     </ol>
@@ -294,6 +294,7 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
     </div>
     <div class="row">
       <button class="btn ghost" id="arSweep" hidden>Sweep: off</button>
+      <button class="btn ghost" id="arClear" hidden>Clear</button>
       <button class="btn" id="arFinish" hidden>Finish</button>
       <button class="btn ghost" id="arCancel">Cancel</button>
     </div>
@@ -435,22 +436,33 @@ function inPoly(x, y, poly){
   }
   return inside;
 }
+function median(a){ const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function toePoly(base){             // toe points ordered by angle around their centre
+  let cx = 0, cz = 0; base.forEach(p => { cx += p[0]; cz += p[2]; }); cx /= base.length; cz /= base.length;
+  return base.map(p => ({x: p[0], y: p[2], h: 0})).sort((a, b) => Math.atan2(a.y - cz, a.x - cx) - Math.atan2(b.y - cz, b.x - cx));
+}
 function scanVolume(base, surf){
   if (base.length < 3) throw 'Need at least 3 toe points.';
   const pl = fitPlane(base);
   const hOf = ([x,y,z]) => y - (pl.a*x + pl.b*z + pl.c);
-  // toe polygon ordered by angle around its centre
-  let cx=0, cz=0; base.forEach(p => { cx+=p[0]; cz+=p[2]; }); cx/=base.length; cz/=base.length;
-  const poly = base.map(p => ({x:p[0], y:p[2], h:0})).sort((a,b) => Math.atan2(a.y-cz,a.x-cx) - Math.atan2(b.y-cz,b.x-cx));
-  // thin surface points on a 15 cm grid, keep highest per cell, drop points outside the toe or below ground
-  const cells = new Map();
+  const poly = toePoly(base);
+  // thin surface points on a 15 cm grid using the median height per cell, so a few bad readings don't count
+  const bins = new Map();
   for (const p of surf){
     const h = hOf(p); if (h < 0.03) continue;
     if (!inPoly(p[0], p[2], poly)) continue;
     const key = Math.round(p[0]/0.15)+','+Math.round(p[2]/0.15);
-    const c = cells.get(key); if (!c || h > c.h) cells.set(key, {x:p[0], y:p[2], h});
+    let b = bins.get(key); if (!b) bins.set(key, b = {xs:0, ys:0, hs:[]});
+    b.xs += p[0]; b.ys += p[2]; b.hs.push(h);
   }
-  const P = poly.concat([...cells.values()]);
+  let cellsArr = [...bins.values()].map(b => ({x: b.xs/b.hs.length, y: b.ys/b.hs.length, h: median(b.hs)}));
+  // drop spikes: a cell more than 0.5 m above its neighbours (within 0.6 m) is a bad reading
+  cellsArr = cellsArr.filter(c => {
+    const nb = cellsArr.filter(o => o !== c && (o.x-c.x)**2 + (o.y-c.y)**2 < 0.36).map(o => o.h);
+    return nb.length < 3 || c.h <= median(nb) + 0.5;
+  });
+  const cells = {size: cellsArr.length};
+  const P = poly.concat(cellsArr);
   const T = delaunay(P);
   let vol = 0, area = 0, maxH = 0; const used = [];
   for (const [i,j,k] of T){
@@ -864,7 +876,8 @@ $('arStart').onclick = async () => {
   let session;
   try {
     session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor'], domOverlay: {root: overlay}});
+      requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'depth-sensing'], domOverlay: {root: overlay},
+      depthSensing: {usagePreference: ['cpu-optimized'], dataFormatPreference: ['luminance-alpha', 'float32']}});
   } catch(e){ overlay.hidden = true; $('arSupport').className = 'status no'; $('arSupport').textContent = 'Could not start AR: ' + e.message; return; }
   session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
   let refSpace;
@@ -874,11 +887,21 @@ $('arStart').onclick = async () => {
   try { hts = await session.requestHitTestSource({space: viewer, entityTypes: ['point', 'plane']}); }
   catch(e){ hts = await session.requestHitTestSource({space: viewer}); }
 
-  xr = {session, phase: 'toe', prev: 'toe', base: [], surf: [], ref: [], sweep: false, hit: null};
+  xr = {session, phase: 'toe', prev: 'toe', base: [], surf: [], ref: [], sweep: false, hit: null, frameN: 0,
+        depth: !!(session.enabledFeatures && session.enabledFeatures.includes('depth-sensing') && session.depthUsage === 'cpu-optimized')};
+  // surface points only count inside the toe outline and at least 2 in above the ground fitted through the toe
+  const surfKeys = new Set();
+  const acceptSurf = p => {
+    const pl = xr.plane, h = p[1] - (pl.a * p[0] + pl.b * p[2] + pl.c);
+    if (h < 0.05 || !inPoly(p[0], p[2], xr.poly)) return false;
+    const k = p.map(v => Math.round(v / 0.08)).join(',');
+    if (!surfKeys.has(k)){ surfKeys.add(k); xr.surf.push(p); }
+    return true;
+  };
   const cv = $('arCanvas'), g = cv.getContext('2d');
   const upd = () => {
-    $('arMeta').textContent = `Toe points ${xr.base.length} · Surface points ${xr.surf.length}`;
-    $('arNext').hidden = xr.phase !== 'toe'; $('arSweep').hidden = $('arFinish').hidden = xr.phase !== 'surf';
+    $('arMeta').textContent = `Toe points ${xr.base.length} · Surface points ${xr.surf.length} · ${xr.depth ? 'depth sensor' : 'feature points'}`;
+    $('arNext').hidden = xr.phase !== 'toe'; $('arSweep').hidden = $('arFinish').hidden = $('arClear').hidden = xr.phase !== 'surf';
     $('arNext').disabled = xr.base.length < 3;
     $('arRef').textContent = `Scale points ${xr.ref.length}/2`;
     $('arPhase').textContent = xr.phase === 'ref' ? 'Scale check' : xr.phase === 'toe' ? 'Step 1 · Toe' : 'Step 2 · Surface';
@@ -886,21 +909,24 @@ $('arStart').onclick = async () => {
       ? `Tap ${xr.ref.length ? 'the other end' : 'one end'} of the tape on the ground.`
       : xr.phase === 'toe'
       ? 'Aim the circle at the toe of the pile and tap the screen. Walk all the way around.'
-      : (xr.sweep ? 'Sweeping: pan slowly over every face, up to the top.' : 'Tap to add points on the pile, or turn on Sweep.');
+      : (xr.sweep ? 'Sweeping. Walk slowly around the pile 6–15 ft back, aiming at the faces and the top. Only points on the pile are kept.'
+                  : 'Turn on Sweep and walk around the pile, or tap to add single points on it.');
     $('arSweep').textContent = 'Sweep: ' + (xr.sweep ? 'on' : 'off');
   };
   const addHit = () => {
     if (!xr.hit) return;
     const p = xr.hit;
     if (xr.phase === 'ref'){ xr.ref.push(p); if (xr.ref.length === 2) xr.phase = xr.prev; }
-    else (xr.phase === 'toe' ? xr.base : xr.surf).push(p);
+    else if (xr.phase === 'toe') xr.base.push(p);
+    else if (!acceptSurf(p)){ upd(); $('arMsg').textContent = 'Skipped: that spot is outside the toe outline or at ground level.'; return; }
     if (navigator.vibrate) navigator.vibrate(15); upd();
   };
   overlay.addEventListener('beforexrselect', e => { if (e.target.closest('#arBottom')) e.preventDefault(); });
   session.addEventListener('select', addHit);
   $('arUndo').onclick = () => { (xr.phase === 'ref' ? xr.ref : xr.phase === 'toe' ? xr.base : xr.surf).pop(); upd(); };
   $('arRef').onclick = () => { if (xr.phase !== 'ref'){ xr.prev = xr.phase; xr.sweep = false; } xr.ref = []; xr.phase = 'ref'; upd(); };
-  $('arNext').onclick = () => { xr.phase = 'surf'; upd(); };
+  $('arNext').onclick = () => { xr.plane = fitPlane(xr.base); xr.poly = toePoly(xr.base); xr.phase = 'surf'; upd(); };
+  $('arClear').onclick = () => { xr.surf = []; surfKeys.clear(); upd(); };
   $('arSweep').onclick = () => { xr.sweep = !xr.sweep; upd(); };
   $('arCancel').onclick = () => { xr.cancelled = true; session.end(); };
   $('arFinish').onclick = () => session.end();
@@ -918,7 +944,6 @@ $('arStart').onclick = async () => {
     if (c[3] <= 0) return null;
     return [(c[0]/c[3] * 0.5 + 0.5) * cv.width, (1 - (c[1]/c[3] * 0.5 + 0.5)) * cv.height];
   };
-  const sweepKeys = new Set();
   session.requestAnimationFrame(function frame(t, f){
     if (!xr) return;
     session.requestAnimationFrame(frame);
@@ -929,9 +954,23 @@ $('arStart').onclick = async () => {
     xr.hit = null;
     if (hits.length){ const hp = hits[0].getPose(refSpace); if (hp){ const q = hp.transform.position; xr.hit = [q.x, q.y, q.z]; } }
     $('cross').classList.toggle('hit', !!xr.hit);
-    if (xr.sweep && xr.hit && xr.surf.length < 4000){
-      const k = xr.hit.map(v => Math.round(v / 0.2)).join(',');
-      if (!sweepKeys.has(k)){ sweepKeys.add(k); xr.surf.push(xr.hit); if (xr.surf.length % 10 === 0) upd(); }
+    if (xr.sweep && xr.phase === 'surf' && xr.surf.length < 8000 && ++xr.frameN % 2 === 0){
+      if (xr.depth){
+        // depth sensor: sample a 9×9 grid over the middle of the screen and turn each depth into a world point
+        try {
+          const v = pose.views[0], di = f.getDepthInformation(v);
+          if (di){
+            const P = v.projectionMatrix, M = v.transform.matrix;
+            for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++){
+              const nx = 0.15 + 0.7 * i / 8, ny = 0.15 + 0.7 * j / 8, d = di.getDepthInMeters(nx, ny);
+              if (!(d > 0.3 && d < 8)) continue;
+              const x = (nx * 2 - 1 + P[8]) * d / P[0], y = (1 - ny * 2 + P[9]) * d / P[5], z = -d;
+              acceptSurf([M[0]*x + M[4]*y + M[8]*z + M[12], M[1]*x + M[5]*y + M[9]*z + M[13], M[2]*x + M[6]*y + M[10]*z + M[14]]);
+            }
+          }
+        } catch(e){ xr.depth = false; }
+      } else if (xr.hit) acceptSurf(xr.hit);
+      if (xr.frameN % 10 === 0) upd();
     }
     // draw captured points over the camera image
     const dpr = window.devicePixelRatio || 1;
