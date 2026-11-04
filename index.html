@@ -80,6 +80,7 @@ ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .hist .item .n{font:500 14px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
 .hist .item .m{font-size:12px;color:var(--muted);grid-column:1/-1}
 .hist .acts{grid-column:1/-1;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.hist .acts .view3d{margin-left:auto;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font-weight:600}
 .hist .acts select{width:auto;max-width:65%;font-size:13px;padding:4px 6px}
 .hist .del{background:none;border:0;color:var(--bad);font-size:12px;cursor:pointer;padding:0}
 .proj{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column}
@@ -496,6 +497,8 @@ function scanVolume(base, surf){
     b.xs += p[0]; b.ys += p[2]; b.hs.push(h);
   }
   let cellsArr = [...bins.values()].map(b => ({x: b.xs/b.hs.length, y: b.ys/b.hs.length, h: pct(b.hs, 0.75)}));
+  // one point per cell is all a saved scan needs to rebuild the same surface and volume later
+  const keep = cellsArr.map(c => [c.x, baseAt(c.x, c.y) + c.h, c.y]);
   // drop spikes: a cell more than 0.5 m above its neighbours (within 0.6 m) is a bad reading
   cellsArr = cellsArr.filter(c => {
     const nb = cellsArr.filter(o => o !== c && (o.x-c.x)**2 + (o.y-c.y)**2 < 0.36).map(o => o.h);
@@ -518,7 +521,7 @@ function scanVolume(base, surf){
   }
   P.forEach(p => maxH = Math.max(maxH, p.h));
   const ys = base.map(p => p[1]), relief = Math.max(...ys) - Math.min(...ys);
-  return {vol, area, maxH, relief, poly, tris: used, nSurf: cells.size};
+  return {vol, area, maxH, relief, poly, tris: used, nSurf: cells.size, keep};
 }
 
 // ---------- formatting ----------
@@ -604,14 +607,17 @@ function render(){
       vol = r.vol; method = (scanIsSample ? 'AR scan · sample' : 'AR scan') + (k !== 1 ? ' · scale checked' : '');
       info = `toe area ${fmtArea(r.area)} · peak ${fmtLen(r.maxH)}`;
       drawMap(r);
+      if (scan.saved){ $('scaleInfo').textContent = `Saved scan “${scan.saved}”. Any scale correction was applied when it was saved.`; }
       $('scanStats').textContent = `${scan.base.length} toe points, ${r.nSurf} surface cells, ${r.tris.length} triangles. Ground along the toe rises and falls ${fmtLen(r.relief)}.`;
+      const mm = a => a.map(p => p.map(v => Math.round(v * 1000) / 1000));
+      var keepScan = {base: mm(S(scan.base)), surf: mm(r.keep)};
     }
   } catch(e){
     $('rVol').innerHTML = '—'; $('rTon').innerHTML = '—'; $('rSub').textContent = '';
     err.textContent = typeof e === 'string' ? e : 'Could not compute: ' + e.message; err.hidden = false; return;
   }
   const dens = densityT_m3(), tons = vol * dens;
-  current = {vol, tons, dens, method, info};
+  current = {vol, tons, dens, method, info, scan: mode === 'ar' && !scanIsSample ? keepScan : null};
   const yd = vol / YD3, st = tons / SHORT_TON, d = v => v < 100 ? 1 : 0;
   $('rVol').innerHTML = nf(yd, d(yd)) + '<small>yd³</small>';
   $('rTon').innerHTML = isFinite(st) ? nf(st, d(st)) + '<small>tons</small>' : '—';
@@ -655,7 +661,7 @@ $('saveBtn').onclick = () => {
   if (!current) return;
   hist.unshift({ id: newId('h'), mod: Date.now(), when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile', project: $('projSel').value,
     material: matSel.selectedOptions[0].text, method: current.method, m3: +current.vol.toFixed(2),
-    dens: +current.dens.toFixed(3), t: +current.tons.toFixed(2), info: current.info });
+    dens: +current.dens.toFixed(3), t: +current.tons.toFixed(2), info: current.info, ...(current.scan ? {scan: current.scan} : {}) });
   changed();
   $('saveBtn').textContent = 'Saved'; setTimeout(() => $('saveBtn').textContent = 'Save', 1500);
 };
@@ -677,10 +683,11 @@ function renderHist(){
     gp.items.forEach(h => {
       const d = document.createElement('div'); d.className = 'item';
       d.innerHTML = `<b></b><span class="n">${nf(h.m3/YD3,1)} yd³ · ${nf(h.t/SHORT_TON,1)} tons</span><span class="m"></span>
-        <div class="acts"><select aria-label="Move to project"></select><button class="del">Delete</button></div>`;
+        <div class="acts"><select aria-label="Move to project"></select><button class="view3d" hidden>3D view</button><button class="del">Delete</button></div>`;
       d.querySelector('b').textContent = h.name;
       d.querySelector('.m').textContent = `${new Date(h.when).toLocaleString()} · ${h.material} · ${h.method}`;
       const sel = d.querySelector('select'); fillProjSelect(sel, valid(h.project));
+      if (h.scan){ const vb = d.querySelector('.view3d'); vb.hidden = false; vb.onclick = () => openSaved(h); }
       sel.onchange = () => { h.project = sel.value; h.mod = Date.now(); changed(); renderHist(); };
       const del = d.querySelector('.del');
       del.onclick = () => {
@@ -702,6 +709,14 @@ function renderHist(){
     }
     L.appendChild(box);
   });
+}
+// reopen a saved AR scan on the AR tab: 3D view, stats and export all work as they did after the scan
+function openSaved(h){
+  scan = {base: h.scan.base, surf: h.scan.surf, ref: [], cams: [], when: h.when, saved: h.name}; scanIsSample = false;
+  $('refDist').value = ''; $('pileName').value = h.name; fillProjSelect($('projSel'), h.project);
+  const m = MATERIALS.find(([k, n]) => n === h.material); if (m){ matSel.value = m[0]; showDensity(); }
+  Object.assign(view3d, VIEW0); setTab('ar');
+  $('arResultBox').scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 $('copyCsv').onclick = async () => {
   const q = s => '"' + String(s).replace(/"/g, '""') + '"';
@@ -751,7 +766,15 @@ async function syncNow(){
     for (let attempt = 0; ; attempt++){
       const r = await fetch(url, {headers: ghHeaders(), cache: 'no-store'});
       let remote = {}, sha, raw = '';
-      if (r.status === 200){ const j = await r.json(); sha = j.sha; raw = b64dec(j.content); remote = JSON.parse(raw); }
+      if (r.status === 200){
+        const j = await r.json(); sha = j.sha;
+        if (j.content) raw = b64dec(j.content);
+        else {   // over 1 MB (lots of saved scans): GitHub leaves the content out, so fetch it raw
+          const rr = await fetch(url, {headers: ghHeaders({Accept: 'application/vnd.github.raw'}), cache: 'no-store'});
+          if (!rr.ok) throw ghWhy(rr.status); raw = await rr.text();
+        }
+        remote = JSON.parse(raw);
+      }
       else if (r.status === 404){   // no data file yet is fine, a missing repo is not
         const rr = await fetch(`https://api.github.com/repos/${syncCfg.repo}`, {headers: ghHeaders(), cache: 'no-store'});
         if (!rr.ok) throw ghWhy(rr.status);
