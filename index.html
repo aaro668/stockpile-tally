@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Stockpile Tally</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#1d2329">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column, phone-first field tool. Tabs on top, live result card pinned under inputs. */
+:root{
+  --bg:#eef0f1; --panel:#ffffff; --ink:#1d2329; --muted:#5d6872; --line:#d3d8dc;
+  --accent:#f2b705; --accent-ink:#1d2329; --steel:#38434d; --good:#2e7d4f; --bad:#b3261e;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14191d; --panel:#1d2329; --ink:#e7eaec; --muted:#9aa5ae; --line:#323b43;
+  --accent:#f2b705; --accent-ink:#14191d; --steel:#c9d1d7; --good:#5cc489; --bad:#ff8a80; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14191d; --panel:#1d2329; --ink:#e7eaec; --muted:#9aa5ae; --line:#323b43;
+  --accent:#f2b705; --accent-ink:#14191d; --steel:#c9d1d7; --good:#5cc489; --bad:#ff8a80; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-size:34px;letter-spacing:.5px;margin:0;line-height:1;text-transform:uppercase}
+h1 span{background:var(--accent);color:var(--accent-ink);padding:0 6px}
+h2{font-family:var(--display);font-size:20px;text-transform:uppercase;letter-spacing:.6px;margin:0}
+.units{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.units button{border:0;background:transparent;color:var(--muted);padding:6px 12px;font:600 13px var(--body);cursor:pointer}
+.units button[aria-pressed="true"]{background:var(--steel);color:var(--bg)}
+nav.tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:2px solid var(--line)}
+nav.tabs button{border:0;background:none;color:var(--muted);font:700 17px var(--display);text-transform:uppercase;letter-spacing:.6px;padding:10px 4px;cursor:pointer;border-bottom:4px solid transparent;margin-bottom:-2px}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{flex:1 1 0;min-width:90px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:8px 6px;font:600 14px var(--body);cursor:pointer}
+.seg button[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:380px){.grid2{grid-template-columns:1fr}}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+input,select{font:500 17px var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%}
+select{font-family:var(--body);font-size:15px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.diagram{display:flex;justify-content:center}
+.diagram svg{max-width:100%;height:auto}
+.result{background:var(--steel);color:var(--bg);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.result .big{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.result .k{font:600 12px var(--body);text-transform:uppercase;letter-spacing:.8px;opacity:.75}
+.result .v{font:700 38px/1 var(--display);font-variant-numeric:tabular-nums}
+.result .v small{font:600 16px var(--display);margin-left:4px;opacity:.8}
+.result .sub{font:500 13px var(--mono);opacity:.8;font-variant-numeric:tabular-nums}
+.result .err{color:var(--accent);font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:0;border-radius:6px;padding:11px 16px;font:700 16px var(--display);text-transform:uppercase;letter-spacing:.6px;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:14px;padding:10px 12px;border-radius:6px;border-left:4px solid var(--muted);background:var(--bg)}
+.status.ok{border-left-color:var(--good)} .status.no{border-left-color:var(--bad)}
+canvas#map{width:100%;max-width:100%;aspect-ratio:1/1;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.tag{display:inline-block;font:600 11px var(--body);text-transform:uppercase;letter-spacing:.8px;background:var(--accent);color:var(--accent-ink);padding:2px 6px;border-radius:3px}
+.hist{display:flex;flex-direction:column;gap:8px}
+.hist .item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hist .item b{font-weight:600}
+.hist .item .n{font:500 14px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.hist .item .m{font-size:12px;color:var(--muted)}
+.hist .del{grid-column:2;justify-self:end;background:none;border:0;color:var(--bad);font-size:12px;cursor:pointer;padding:0}
+textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+/* AR overlay */
+#arOverlay{position:fixed;inset:0;pointer-events:none;font-family:var(--body);color:#fff}
+#arOverlay canvas{position:absolute;inset:0;width:100%;height:100%}
+#arOverlay .cross{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+#arOverlay .cross.hit{border-color:#f2b705}
+#arOverlay .cross::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;background:currentColor;border-radius:50%}
+#arTop{position:absolute;top:0;left:0;right:0;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;background:rgba(20,25,29,.78);font-size:15px}
+#arTop b{font-family:var(--display);font-size:22px;text-transform:uppercase;letter-spacing:.5px;display:block;color:#f2b705}
+#arBottom{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(20,25,29,.78);display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+#arBottom .row .btn{flex:1}
+#arBottom .meta{font:500 13px var(--mono);color:#cfd6db}
+#arBottom .btn.ghost{color:#fff;border-color:rgba(255,255,255,.4)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1><span>Stockpile</span> Tally</h1>
+    <div class="units" role="group" aria-label="Units">
+      <button id="uMetric" aria-pressed="true">m / t</button>
+      <button id="uImp" aria-pressed="false">ft / ton</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tabTape" aria-selected="true">Tape</button>
+    <button role="tab" id="tabAR" aria-selected="false">AR scan</button>
+    <button role="tab" id="tabHist" aria-selected="false">Saved</button>
+  </nav>
+
+  <!-- Material is shared by both measuring modes -->
+  <section class="panel" id="materialPanel">
+    <div class="grid2">
+      <label>Material
+        <select id="material"></select>
+      </label>
+      <label><span id="densLabel">Bulk density (t/m³)</span>
+        <input id="density" type="number" inputmode="decimal" step="0.01" min="0.1">
+      </label>
+    </div>
+    <p class="hint">Loose stockpile densities vary with moisture and grading. Calibrate against a scale ticket once and the app remembers it.</p>
+  </section>
+
+  <!-- TAPE MODE -->
+  <section id="viewTape" class="panel">
+    <h2>Pile shape</h2>
+    <div class="seg" role="group" aria-label="Pile shape">
+      <button data-shape="cone" aria-pressed="true">Cone</button>
+      <button data-shape="windrow" aria-pressed="false">Long pile</button>
+      <button data-shape="flat" aria-pressed="false">Flat top</button>
+    </div>
+    <div class="diagram" id="diagram"></div>
+
+    <div id="coneIn" class="grid2">
+      <label>Measure by
+        <select id="coneMethod">
+          <option value="ott">Circumference + over the top</option>
+          <option value="dh">Diameter + height</option>
+        </select>
+      </label>
+      <span></span>
+      <label id="lC">Circumference at toe <span class="u">(m)</span><input id="cC" type="number" inputmode="decimal" step="any" value="31.4"></label>
+      <label id="lO">Over the top, toe to toe <span class="u">(m)</span><input id="cO" type="number" inputmode="decimal" step="any" value="14.2"></label>
+      <label id="lD" hidden>Base diameter <span class="u">(m)</span><input id="cD" type="number" inputmode="decimal" step="any" value="10"></label>
+      <label id="lH" hidden>Height <span class="u">(m)</span><input id="cH" type="number" inputmode="decimal" step="any" value="3.2"></label>
+    </div>
+
+    <div id="windIn" class="grid2" hidden>
+      <label>Length, toe to toe <span class="u">(m)</span><input id="wL" type="number" inputmode="decimal" step="any" value="25"></label>
+      <label>Width, toe to toe <span class="u">(m)</span><input id="wW" type="number" inputmode="decimal" step="any" value="9"></label>
+      <label>Height by
+        <select id="windMethod">
+          <option value="ott">Over the top (across width)</option>
+          <option value="h">Measured height</option>
+        </select>
+      </label>
+      <label id="lwO">Over the top <span class="u">(m)</span><input id="wO" type="number" inputmode="decimal" step="any" value="12.5"></label>
+      <label id="lwH" hidden>Height <span class="u">(m)</span><input id="wH" type="number" inputmode="decimal" step="any" value="3.5"></label>
+    </div>
+
+    <div id="flatIn" class="grid2" hidden>
+      <label>Base length <span class="u">(m)</span><input id="fL" type="number" inputmode="decimal" step="any" value="20"></label>
+      <label>Base width <span class="u">(m)</span><input id="fW" type="number" inputmode="decimal" step="any" value="12"></label>
+      <label>Top length <span class="u">(m)</span><input id="fl" type="number" inputmode="decimal" step="any" value="12"></label>
+      <label>Top width <span class="u">(m)</span><input id="fw" type="number" inputmode="decimal" step="any" value="4"></label>
+      <label>Height <span class="u">(m)</span><input id="fH" type="number" inputmode="decimal" step="any" value="3"></label>
+    </div>
+    <p class="hint" id="tapeHint">Walk a tape around the toe of the pile for the circumference, then throw it over the peak from toe to toe. No need to climb the pile.</p>
+  </section>
+
+  <!-- AR MODE -->
+  <section id="viewAR" class="panel" hidden>
+    <h2>Walk-around scan</h2>
+    <div id="arSupport" class="status">Checking whether this phone supports AR…</div>
+    <ol class="steps">
+      <li><b>Toe:</b> walk around the pile and tap where it meets the ground, every few metres (8+ taps).</li>
+      <li><b>Surface:</b> turn on Sweep and slowly pan the camera up and over every face you can see.</li>
+      <li><b>Scale check (optional):</b> lay a tape on the ground, tap Scale points, then tap both ends. Enter the tape distance after the scan to correct tracking drift.</li>
+      <li><b>Finish:</b> the app fits the ground, builds a surface and integrates the volume.</li>
+    </ol>
+    <div class="row">
+      <button class="btn" id="arStart" disabled>Start AR scan</button>
+      <button class="btn ghost" id="arDemo">Load sample scan</button>
+    </div>
+    <div id="arResultBox" hidden>
+      <div class="row" style="justify-content:space-between"><h2>Height map</h2><span class="tag" id="sampleTag" hidden>Sample data</span></div>
+      <canvas id="map" width="600" height="600" aria-label="Top-down height map of scanned pile"></canvas>
+      <p class="hint" id="scanStats"></p>
+      <div id="scaleBox" class="panel" style="padding:12px;gap:8px">
+        <h2>Scale check</h2>
+        <p class="hint" id="scaleInfo"></p>
+        <label>Tape distance between the two scale points <span class="u">(m)</span>
+          <input id="refDist" type="number" inputmode="decimal" step="any" placeholder="e.g. 10">
+        </label>
+      </div>
+    </div>
+    <p class="hint">Works on ARCore phones in Chrome. Best for piles up to about 6 m tall in daylight; the camera can't see the top of very tall piles from the ground, so those come out low. Use a drone survey for large piles.</p>
+  </section>
+
+  <!-- RESULT -->
+  <section class="result" id="resultCard">
+    <div class="big">
+      <div><div class="k">Volume</div><div class="v" id="rVol">—</div></div>
+      <div><div class="k">Weight</div><div class="v" id="rTon">—</div></div>
+    </div>
+    <div class="sub" id="rSub"></div>
+    <div class="sub err" id="rErr" hidden></div>
+    <div class="row">
+      <input id="pileName" type="text" placeholder="Pile name, e.g. North yard 3/4 clear" style="flex:1;min-width:180px;font-family:var(--body);font-size:15px">
+      <button class="btn" id="saveBtn">Save</button>
+    </div>
+    <details>
+      <summary class="sub" style="cursor:pointer">Calibrate density from a scale ticket</summary>
+      <div class="row" style="margin-top:8px">
+        <input id="actualTons" type="number" inputmode="decimal" step="any" placeholder="Weighed tonnes" style="flex:1">
+        <button class="btn" id="calBtn">Calibrate</button>
+      </div>
+      <p class="sub" id="calMsg"></p>
+    </details>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="viewHist" class="panel" hidden>
+    <h2>Saved estimates</h2>
+    <div class="hist" id="histList"></div>
+    <div class="row">
+      <button class="btn ghost" id="copyCsv">Copy as CSV</button>
+    </div>
+    <textarea id="csvOut" hidden readonly></textarea>
+    <p class="hint">Saved on this phone only.</p>
+  </section>
+</div>
+
+<!-- AR overlay (lives outside .wrap so it can cover the screen) -->
+<div id="arOverlay" hidden>
+  <canvas id="arCanvas"></canvas>
+  <div class="cross" id="cross"></div>
+  <div id="arTop"><b id="arPhase">Step 1 · Toe</b><span id="arMsg">Aim the circle at the toe of the pile and tap the screen.</span></div>
+  <div id="arBottom">
+    <div class="meta" id="arMeta">Toe points 0 · Surface points 0</div>
+    <div class="row">
+      <button class="btn ghost" id="arUndo">Undo</button>
+      <button class="btn ghost" id="arRef">Scale points 0/2</button>
+      <button class="btn" id="arNext">Next: surface</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="arSweep" hidden>Sweep: off</button>
+      <button class="btn" id="arFinish" hidden>Finish</button>
+      <button class="btn ghost" id="arCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- units & storage ----------
+const FT = 0.3048, YD3 = 0.764554858, SHORT_TON = 0.90718474;
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let imperial = store.get('sp.imperial', false);
+const $ = id => document.getElementById(id);
+
+// Typical loose bulk densities, tonnes per cubic metre
+const MATERIALS = [
+  ['gravel', 'Gravel, loose dry', 1.52],
+  ['gravelwet', 'Gravel, wet', 1.92],
+  ['pea', 'Pea gravel', 1.60],
+  ['clear', 'Crushed stone / ¾" clear', 1.60],
+  ['granA', 'Road base (Granular A / crusher run)', 1.80],
+  ['sand', 'Sand, dry', 1.55],
+  ['sandwet', 'Sand, wet', 1.92],
+  ['riprap', 'Rip-rap / large rock', 1.60],
+  ['concrete', 'Recycled concrete', 1.45],
+  ['millings', 'Asphalt millings', 1.30],
+  ['topsoil', 'Topsoil', 1.25],
+];
+let calibrated = store.get('sp.cal', {});           // material key -> t/m³
+const matSel = $('material');
+MATERIALS.forEach(([k, n]) => { const o = document.createElement('option'); o.value = k; o.textContent = n; matSel.appendChild(o); });
+matSel.value = store.get('sp.mat', 'gravel');
+function baseDensity(k){ return calibrated[k] ?? MATERIALS.find(m => m[0] === k)[2]; }
+function densityT_m3(){
+  const v = parseFloat($('density').value);
+  if (!(v > 0)) return NaN;
+  return imperial ? v * SHORT_TON / YD3 : v;           // imperial input is short tons / yd³
+}
+function showDensity(){
+  const d = baseDensity(matSel.value);
+  $('density').value = (imperial ? d * YD3 / SHORT_TON : d).toFixed(2);
+  $('densLabel').textContent = (imperial ? 'Bulk density (ton/yd³)' : 'Bulk density (t/m³)') + (calibrated[matSel.value] ? ' · calibrated' : '');
+}
+matSel.addEventListener('change', () => { store.set('sp.mat', matSel.value); showDensity(); render(); });
+$('density').addEventListener('input', render);
+
+// ---------- geometry: tape formulas (all metres) ----------
+const Tape = {
+  cone({method, C, O, D, H}){
+    let r, h;
+    if (method === 'ott'){
+      r = C / (2 * Math.PI); const s = O / 2;
+      if (!(s > r)) throw 'Over-the-top must be longer than the base diameter (' + fmtLen(2 * r) + ').';
+      h = Math.sqrt(s * s - r * r);
+    } else { r = D / 2; h = H; }
+    return { vol: Math.PI * r * r * h / 3, info: `Ø ${fmtLen(2 * r)} · height ${fmtLen(h)} · slope ${(Math.atan2(h, r) * 180 / Math.PI).toFixed(0)}°` };
+  },
+  windrow({L, W, method, O, H}){
+    let h = H;
+    if (method === 'ott'){
+      const s = O / 2, r = W / 2;
+      if (!(s > r)) throw 'Over-the-top must be longer than the width.';
+      h = Math.sqrt(s * s - r * r);
+    }
+    if (L < W) throw 'Length should be at least the width. For a round pile use Cone.';
+    // half-cone ends (together one cone of diameter W) + triangular prism in the middle
+    const vol = Math.PI * W * W * h / 12 + (L - W) * W * h / 2;
+    return { vol, info: `height ${fmtLen(h)} · slope ${(Math.atan2(h, W / 2) * 180 / Math.PI).toFixed(0)}°` };
+  },
+  flat({L, W, l, w, H}){
+    if (l > L || w > W) throw 'Top must be smaller than the base.';
+    const A1 = L * W, A2 = l * w, Am = ((L + l) / 2) * ((W + w) / 2);
+    return { vol: H / 6 * (A1 + A2 + 4 * Am), info: `base ${fmtArea(A1)} · top ${fmtArea(A2)}` };   // prismoidal formula
+  }
+};
+
+// ---------- geometry: point-cloud volume ----------
+// points are [x, y, z] metres with y up (WebXR convention)
+function fitPlane(pts){                 // least squares y = a x + b z + c
+  let sxx=0,sxz=0,szz=0,sx=0,sz=0,n=pts.length,sxy=0,szy=0,sy=0;
+  for (const [x,y,z] of pts){ sxx+=x*x; sxz+=x*z; szz+=z*z; sx+=x; sz+=z; sxy+=x*y; szy+=z*y; sy+=y; }
+  const M = [[sxx,sxz,sx],[sxz,szz,sz],[sx,sz,n]], v = [sxy,szy,sy];
+  const det = m => m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1]) - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0]) + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+  const D = det(M);
+  if (Math.abs(D) < 1e-9){ return {a:0,b:0,c:sy/n}; }
+  const col = i => M.map((r,k) => r.map((e,j) => j===i ? v[k] : e));
+  return { a: det(col(0))/D, b: det(col(1))/D, c: det(col(2))/D };
+}
+function delaunay(P){                   // Bowyer–Watson, P = [{x,y}], returns triangles as index triples
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for (const p of P){ minX=Math.min(minX,p.x); minY=Math.min(minY,p.y); maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); }
+  const d = Math.max(maxX-minX, maxY-minY) * 20 + 1, mx=(minX+maxX)/2, my=(minY+maxY)/2;
+  const pts = P.concat([{x:mx-d,y:my-d},{x:mx,y:my+d},{x:mx+d,y:my-d}]);
+  const n = P.length;
+  const circ = (i,j,k) => {
+    const A=pts[i],B=pts[j],C=pts[k];
+    const D2 = 2*(A.x*(B.y-C.y)+B.x*(C.y-A.y)+C.x*(A.y-B.y));
+    const a2=A.x*A.x+A.y*A.y, b2=B.x*B.x+B.y*B.y, c2=C.x*C.x+C.y*C.y;
+    const ux=(a2*(B.y-C.y)+b2*(C.y-A.y)+c2*(A.y-B.y))/D2, uy=(a2*(C.x-B.x)+b2*(A.x-C.x)+c2*(B.x-A.x))/D2;
+    return {i,j,k,ux,uy,r2:(A.x-ux)**2+(A.y-uy)**2};
+  };
+  let tris = [circ(n,n+1,n+2)];
+  for (let p = 0; p < n; p++){
+    const {x,y} = pts[p], bad = [], keep = [];
+    for (const t of tris) ((x-t.ux)**2+(y-t.uy)**2 < t.r2 ? bad : keep).push(t);
+    const edges = new Map();
+    for (const t of bad) for (const [a,b] of [[t.i,t.j],[t.j,t.k],[t.k,t.i]]){
+      const key = a<b ? a+','+b : b+','+a;
+      edges.has(key) ? edges.delete(key) : edges.set(key,[a,b]);
+    }
+    for (const [a,b] of edges.values()) keep.push(circ(a,b,p));
+    tris = keep;
+  }
+  return tris.filter(t => t.i<n && t.j<n && t.k<n).map(t => [t.i,t.j,t.k]);
+}
+function inPoly(x, y, poly){
+  let inside = false;
+  for (let i=0, j=poly.length-1; i<poly.length; j=i++){
+    const a=poly[i], b=poly[j];
+    if ((a.y>y) !== (b.y>y) && x < (b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x) inside = !inside;
+  }
+  return inside;
+}
+function scanVolume(base, surf){
+  if (base.length < 3) throw 'Need at least 3 toe points.';
+  const pl = fitPlane(base);
+  const hOf = ([x,y,z]) => y - (pl.a*x + pl.b*z + pl.c);
+  // toe polygon ordered by angle around its centre
+  let cx=0, cz=0; base.forEach(p => { cx+=p[0]; cz+=p[2]; }); cx/=base.length; cz/=base.length;
+  const poly = base.map(p => ({x:p[0], y:p[2], h:0})).sort((a,b) => Math.atan2(a.y-cz,a.x-cx) - Math.atan2(b.y-cz,b.x-cx));
+  // thin surface points on a 15 cm grid, keep highest per cell, drop points outside the toe or below ground
+  const cells = new Map();
+  for (const p of surf){
+    const h = hOf(p); if (h < 0.03) continue;
+    if (!inPoly(p[0], p[2], poly)) continue;
+    const key = Math.round(p[0]/0.15)+','+Math.round(p[2]/0.15);
+    const c = cells.get(key); if (!c || h > c.h) cells.set(key, {x:p[0], y:p[2], h});
+  }
+  const P = poly.concat([...cells.values()]);
+  const T = delaunay(P);
+  let vol = 0, area = 0, maxH = 0; const used = [];
+  for (const [i,j,k] of T){
+    const A=P[i],B=P[j],C=P[k];
+    if (!inPoly((A.x+B.x+C.x)/3, (A.y+B.y+C.y)/3, poly)) continue;
+    const ar = Math.abs((B.x-A.x)*(C.y-A.y) - (C.x-A.x)*(B.y-A.y)) / 2;
+    area += ar; vol += ar * (A.h+B.h+C.h)/3; used.push([A,B,C]);
+  }
+  P.forEach(p => maxH = Math.max(maxH, p.h));
+  const tilt = Math.atan(Math.hypot(pl.a, pl.b)) * 180 / Math.PI;
+  return {vol, area, maxH, tilt, poly, tris: used, nSurf: cells.size};
+}
+
+// ---------- formatting ----------
+const nf = (v, d=1) => v.toLocaleString(undefined, {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtLen = m => imperial ? nf(m/FT) + ' ft' : nf(m, 2) + ' m';
+const fmtArea = a => imperial ? nf(a/(FT*FT), 0) + ' ft²' : nf(a, 1) + ' m²';
+const toM = v => imperial ? v * FT : v;
+
+// ---------- UI state ----------
+let mode = 'tape', shape = 'cone', scan = null, scanIsSample = false, current = null;
+
+const DIAGRAMS = {
+  cone: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L140 20 L260 100" fill="var(--bg)"/><ellipse cx="140" cy="100" rx="120" ry="12" stroke-dasharray="5 4"/><path d="M20 100 L140 20 L260 100" stroke="var(--accent)" stroke-width="3"/><text x="140" y="14" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">over the top</text><text x="140" y="119" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">circumference at toe</text></svg>`,
+  windrow: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 95 Q40 30 80 30 L200 30 Q240 30 260 95 Z" fill="var(--bg)"/><path d="M20 108 H260" stroke="var(--accent)" stroke-width="3"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">length (toe to toe)</text><text x="140" y="70" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">ridge</text></svg>`,
+  flat: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L80 30 L200 30 L260 100 Z" fill="var(--bg)"/><path d="M80 30 H200" stroke="var(--accent)" stroke-width="3"/><path d="M20 100 H260" stroke="var(--accent)" stroke-width="3"/><path d="M140 30 V100" stroke-dasharray="4 4"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">top length × width</text><text x="148" y="70" fill="currentColor" stroke="none" font-size="11">height</text><text x="140" y="116" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">base length × width</text></svg>`
+};
+const HINTS = {
+  cone: 'Walk a tape around the toe of the pile for the circumference, then throw it over the peak from toe to toe. No need to climb the pile.',
+  windrow: 'Measure length and width at the toe. For height, throw a tape over the ridge from toe to toe across the width.',
+  flat: 'For dozed or bin-shaped piles with a flat top. Measure the toe rectangle and the flat top, plus the height.'
+};
+
+function setShape(s){
+  shape = s;
+  document.querySelectorAll('[data-shape]').forEach(b => b.setAttribute('aria-pressed', b.dataset.shape === s));
+  $('coneIn').hidden = s !== 'cone'; $('windIn').hidden = s !== 'windrow'; $('flatIn').hidden = s !== 'flat';
+  $('diagram').innerHTML = DIAGRAMS[s]; $('tapeHint').textContent = HINTS[s];
+  render();
+}
+document.querySelectorAll('[data-shape]').forEach(b => b.addEventListener('click', () => setShape(b.dataset.shape)));
+$('coneMethod').addEventListener('change', () => {
+  const ott = $('coneMethod').value === 'ott';
+  $('lC').hidden = $('lO').hidden = !ott; $('lD').hidden = $('lH').hidden = ott; render();
+});
+$('windMethod').addEventListener('change', () => {
+  const ott = $('windMethod').value === 'ott';
+  $('lwO').hidden = !ott; $('lwH').hidden = ott; render();
+});
+document.querySelectorAll('#viewTape input, #refDist').forEach(i => i.addEventListener('input', render));
+
+function setTab(t){
+  mode = t;
+  [['tape','tabTape','viewTape'],['ar','tabAR','viewAR'],['hist','tabHist','viewHist']].forEach(([k,tab,view]) => {
+    $(tab).setAttribute('aria-selected', k === t); $(view).hidden = k !== t;
+  });
+  $('resultCard').hidden = t === 'hist'; $('materialPanel').hidden = t === 'hist';
+  if (t === 'hist') renderHist();
+  render();
+}
+$('tabTape').onclick = () => setTab('tape'); $('tabAR').onclick = () => setTab('ar'); $('tabHist').onclick = () => setTab('hist');
+
+function setUnits(imp){
+  // convert lengths already typed so the pile stays the same size
+  const f = imp === imperial ? 1 : (imp ? 1/FT : FT);
+  document.querySelectorAll('#viewTape input, #refDist').forEach(i => { const v = parseFloat(i.value); if (!isNaN(v)) i.value = +(v*f).toFixed(2); });
+  imperial = imp; store.set('sp.imperial', imp);
+  $('uMetric').setAttribute('aria-pressed', !imp); $('uImp').setAttribute('aria-pressed', imp);
+  document.querySelectorAll('.u').forEach(s => s.textContent = imp ? '(ft)' : '(m)');
+  showDensity(); render();
+}
+$('uMetric').onclick = () => setUnits(false); $('uImp').onclick = () => setUnits(true);
+
+const num = id => toM(parseFloat($(id).value));
+function render(){
+  if (mode === 'hist') return;
+  const err = $('rErr'); err.hidden = true; current = null;
+  let vol = NaN, info = '', method = '';
+  try {
+    if (mode === 'tape'){
+      let r;
+      if (shape === 'cone') r = Tape.cone({method:$('coneMethod').value, C:num('cC'), O:num('cO'), D:num('cD'), H:num('cH')});
+      if (shape === 'windrow') r = Tape.windrow({L:num('wL'), W:num('wW'), method:$('windMethod').value, O:num('wO'), H:num('wH')});
+      if (shape === 'flat') r = Tape.flat({L:num('fL'), W:num('fW'), l:num('fl'), w:num('fw'), H:num('fH')});
+      vol = r.vol; info = r.info; method = {cone:'Tape · cone', windrow:'Tape · long pile', flat:'Tape · flat top'}[shape];
+      if (!isFinite(vol) || vol <= 0) throw 'Fill in every measurement.';
+    } else {
+      if (!scan) throw 'No scan yet. Start an AR scan or load the sample.';
+      // scale check: uniform rescale so the two reference points match the taped distance
+      let k = 1; const ref = scan.ref || [];
+      $('scaleBox').hidden = false;
+      if (ref.length === 2){
+        const arD = Math.hypot(ref[0][0]-ref[1][0], ref[0][1]-ref[1][1], ref[0][2]-ref[1][2]);
+        const tape = num('refDist');
+        if (tape > 0 && arD > 0){
+          k = tape / arD;
+          $('scaleInfo').textContent = `AR measured ${fmtLen(arD)}. Scale corrected by ${((k-1)*100).toFixed(1)}% in length, ${((k**3-1)*100).toFixed(1)}% in volume.`;
+        } else $('scaleInfo').textContent = `AR measured ${fmtLen(arD)} between the scale points. Enter the tape distance to correct for drift.`;
+      } else $('scaleInfo').textContent = 'No scale points in this scan. The volume uses ARCore’s own scale, usually within a few percent.';
+      const S = pts => pts.map(p => p.map(v => v * k));
+      const r = scanVolume(S(scan.base), S(scan.surf));
+      vol = r.vol; method = (scanIsSample ? 'AR scan · sample' : 'AR scan') + (k !== 1 ? ' · scale checked' : '');
+      info = `toe area ${fmtArea(r.area)} · peak ${fmtLen(r.maxH)}`;
+      drawMap(r);
+      $('scanStats').textContent = `${scan.base.length} toe points, ${r.nSurf} surface cells, ${r.tris.length} triangles. Ground tilt ${r.tilt.toFixed(1)}°.`;
+    }
+  } catch(e){
+    $('rVol').innerHTML = '—'; $('rTon').innerHTML = '—'; $('rSub').textContent = '';
+    err.textContent = typeof e === 'string' ? e : 'Could not compute: ' + e.message; err.hidden = false; return;
+  }
+  const dens = densityT_m3(), tons = vol * dens;
+  current = {vol, tons, dens, method, info};
+  if (imperial){
+    $('rVol').innerHTML = nf(vol/YD3, 0) + '<small>yd³</small>';
+    $('rTon').innerHTML = isFinite(tons) ? nf(tons/SHORT_TON, 0) + '<small>tons</small>' : '—';
+    $('rSub').textContent = `${nf(vol, 1)} m³ · ${isFinite(tons) ? nf(tons, 1) + ' t' : ''} · ${info}`;
+  } else {
+    $('rVol').innerHTML = nf(vol, 1) + '<small>m³</small>';
+    $('rTon').innerHTML = isFinite(tons) ? nf(tons, 1) + '<small>t</small>' : '—';
+    $('rSub').textContent = `${nf(vol/YD3, 0)} yd³ · ${isFinite(tons) ? nf(tons/SHORT_TON, 0) + ' short tons' : ''} · ${info}`;
+  }
+}
+
+// ---------- calibrate & save ----------
+$('calBtn').onclick = () => {
+  const t = parseFloat($('actualTons').value);
+  if (!current || !(t > 0)){ $('calMsg').textContent = 'Enter the weighed amount for the pile measured above.'; return; }
+  const tonnes = imperial ? t * SHORT_TON : t, d = tonnes / current.vol;
+  calibrated[matSel.value] = +d.toFixed(3); store.set('sp.cal', calibrated);
+  $('calMsg').textContent = `Saved ${nf(d, 2)} t/m³ for ${matSel.selectedOptions[0].text}.`;
+  showDensity(); render();
+};
+let hist = store.get('sp.hist', []);
+$('saveBtn').onclick = () => {
+  if (!current) return;
+  hist.unshift({ when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile',
+    material: matSel.selectedOptions[0].text, method: current.method, m3: +current.vol.toFixed(2),
+    dens: +current.dens.toFixed(3), t: +current.tons.toFixed(2), info: current.info });
+  store.set('sp.hist', hist);
+  $('saveBtn').textContent = 'Saved'; setTimeout(() => $('saveBtn').textContent = 'Save', 1500);
+};
+function renderHist(){
+  const L = $('histList'); L.innerHTML = '';
+  if (!hist.length){ L.innerHTML = '<p class="hint">Nothing saved yet. Measure a pile and tap Save.</p>'; return; }
+  hist.forEach((h, i) => {
+    const d = document.createElement('div'); d.className = 'item';
+    const v = imperial ? `${nf(h.m3/YD3,0)} yd³ · ${nf(h.t/SHORT_TON,0)} tons` : `${nf(h.m3,1)} m³ · ${nf(h.t,1)} t`;
+    d.innerHTML = `<b></b><span class="n">${v}</span><span class="m"></span><button class="del">Delete</button>`;
+    d.querySelector('b').textContent = h.name;
+    d.querySelector('.m').textContent = `${new Date(h.when).toLocaleString()} · ${h.material} · ${h.method}`;
+    d.querySelector('.del').onclick = () => { hist.splice(i, 1); store.set('sp.hist', hist); renderHist(); };
+    L.appendChild(d);
+  });
+}
+$('copyCsv').onclick = async () => {
+  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+  const csv = ['date,name,material,method,volume_m3,volume_yd3,density_t_m3,tonnes,short_tons']
+    .concat(hist.map(h => [h.when, q(h.name), q(h.material), q(h.method), h.m3, (h.m3/YD3).toFixed(1), h.dens, h.t, (h.t/SHORT_TON).toFixed(1)].join(','))).join('\n');
+  const ta = $('csvOut'); ta.value = csv; ta.hidden = false;
+  try { await navigator.clipboard.writeText(csv); $('copyCsv').textContent = 'Copied'; }
+  catch(e){ ta.select(); $('copyCsv').textContent = 'Select and copy below'; }
+};
+
+// ---------- height map ----------
+function drawMap(r){
+  $('arResultBox').hidden = false; $('sampleTag').hidden = !scanIsSample;
+  const cv = $('map'), g = cv.getContext('2d'), S = cv.width, cs = getComputedStyle(document.documentElement);
+  g.clearRect(0, 0, S, S);
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  r.poly.forEach(p => { minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); });
+  const span = Math.max(maxX-minX, maxY-minY) || 1, sc = (S - 60) / span;
+  const X = x => 30 + (x - minX) * sc + ((span - (maxX-minX)) * sc) / 2, Y = y => 30 + (y - minY) * sc + ((span - (maxY-minY)) * sc) / 2;
+  const ramp = t => `hsl(${210 - 170 * t} 70% ${35 + 20 * t}%)`;   // low blue → high amber
+  for (const [A,B,C] of r.tris){
+    const t = ((A.h+B.h+C.h)/3) / (r.maxH || 1);
+    g.fillStyle = ramp(t); g.strokeStyle = ramp(t);
+    g.beginPath(); g.moveTo(X(A.x),Y(A.y)); g.lineTo(X(B.x),Y(B.y)); g.lineTo(X(C.x),Y(C.y)); g.closePath(); g.fill(); g.stroke();
+  }
+  g.strokeStyle = cs.getPropertyValue('--ink'); g.lineWidth = 2; g.beginPath();
+  r.poly.forEach((p,i) => i ? g.lineTo(X(p.x),Y(p.y)) : g.moveTo(X(p.x),Y(p.y))); g.closePath(); g.stroke();
+  g.fillStyle = cs.getPropertyValue('--ink');
+  r.poly.forEach(p => { g.beginPath(); g.arc(X(p.x),Y(p.y),4,0,7); g.fill(); });
+  // scale bar
+  const bar = imperial ? 10*FT : 2, px = bar * sc;
+  g.fillRect(30, S - 18, px, 4); g.font = '600 14px IBM Plex Sans, sans-serif';
+  g.fillText(imperial ? '10 ft' : '2 m', 36 + px, S - 12);
+}
+
+// ---------- sample scan (synthetic, irregular pile on sloping ground) ----------
+function sampleScan(){
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const a = 4.0, b = 3.0, H = 2.5, tilt = (x, z) => 0.03 * x - 0.02 * z + 0.4;   // elliptical cone, V = πabH/3 ≈ 31.4 m³
+  const base = [], surf = [];
+  for (let i = 0; i < 14; i++){ const t = i / 14 * 2 * Math.PI + rnd() * 0.2; const x = a*Math.cos(t), z = b*Math.sin(t); base.push([x, tilt(x,z) + (rnd()-.5)*0.03, z]); }
+  for (let i = 0; i < 1600; i++){
+    const t = rnd() * 2 * Math.PI, rho = Math.sqrt(rnd());
+    const x = a*rho*Math.cos(t), z = b*rho*Math.sin(t);
+    surf.push([x, tilt(x,z) + H*(1-rho) + (rnd()-.5)*0.04, z]);
+  }
+  // simulate 3% tracking drift: everything reads 3% long, scale points are a 5.00 m tape
+  const drift = 1.03, D = pts => pts.map(p => p.map(v => v * drift));
+  return {base: D(base), surf: D(surf), ref: D([[-2.5, tilt(-2.5,-4), -4], [2.5, tilt(2.5,-4), -4]])};
+}
+$('arDemo').onclick = () => { scan = sampleScan(); scanIsSample = true; $('refDist').value = imperial ? +(5/FT).toFixed(2) : 5; render(); };
+
+// ---------- WebXR walk-around scan ----------
+let xr = null;
+(async function checkAR(){
+  const box = $('arSupport');
+  const notInFrame = window.top === window.self;
+  try {
+    if (navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')){
+      box.className = 'status ok'; box.textContent = 'AR is available on this device.'; $('arStart').disabled = false; return;
+    }
+  } catch(e){}
+  box.className = 'status no';
+  box.textContent = notInFrame
+    ? 'AR is not available here. Use Chrome on an Android phone with Google Play Services for AR installed.'
+    : 'AR needs the app opened on its own web address in Chrome on Android (it can’t run inside this preview). Tape mode works everywhere.';
+})();
+
+$('arStart').onclick = async () => {
+  const overlay = $('arOverlay'); overlay.hidden = false;
+  const glc = document.createElement('canvas');
+  const gl = glc.getContext('webgl', {xrCompatible: true});
+  let session;
+  try {
+    session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor'], domOverlay: {root: overlay}});
+  } catch(e){ overlay.hidden = true; $('arSupport').className = 'status no'; $('arSupport').textContent = 'Could not start AR: ' + e.message; return; }
+  session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
+  let refSpace;
+  try { refSpace = await session.requestReferenceSpace('local-floor'); } catch(e){ refSpace = await session.requestReferenceSpace('local'); }
+  const viewer = await session.requestReferenceSpace('viewer');
+  let hts;
+  try { hts = await session.requestHitTestSource({space: viewer, entityTypes: ['point', 'plane']}); }
+  catch(e){ hts = await session.requestHitTestSource({space: viewer}); }
+
+  xr = {session, phase: 'toe', prev: 'toe', base: [], surf: [], ref: [], sweep: false, hit: null};
+  const cv = $('arCanvas'), g = cv.getContext('2d');
+  const upd = () => {
+    $('arMeta').textContent = `Toe points ${xr.base.length} · Surface points ${xr.surf.length}`;
+    $('arNext').hidden = xr.phase !== 'toe'; $('arSweep').hidden = $('arFinish').hidden = xr.phase !== 'surf';
+    $('arNext').disabled = xr.base.length < 3;
+    $('arRef').textContent = `Scale points ${xr.ref.length}/2`;
+    $('arPhase').textContent = xr.phase === 'ref' ? 'Scale check' : xr.phase === 'toe' ? 'Step 1 · Toe' : 'Step 2 · Surface';
+    $('arMsg').textContent = xr.phase === 'ref'
+      ? `Tap ${xr.ref.length ? 'the other end' : 'one end'} of the tape on the ground.`
+      : xr.phase === 'toe'
+      ? 'Aim the circle at the toe of the pile and tap the screen. Walk all the way around.'
+      : (xr.sweep ? 'Sweeping: pan slowly over every face, up to the top.' : 'Tap to add points on the pile, or turn on Sweep.');
+    $('arSweep').textContent = 'Sweep: ' + (xr.sweep ? 'on' : 'off');
+  };
+  const addHit = () => {
+    if (!xr.hit) return;
+    const p = xr.hit;
+    if (xr.phase === 'ref'){ xr.ref.push(p); if (xr.ref.length === 2) xr.phase = xr.prev; }
+    else (xr.phase === 'toe' ? xr.base : xr.surf).push(p);
+    if (navigator.vibrate) navigator.vibrate(15); upd();
+  };
+  overlay.addEventListener('beforexrselect', e => { if (e.target.closest('#arBottom')) e.preventDefault(); });
+  session.addEventListener('select', addHit);
+  $('arUndo').onclick = () => { (xr.phase === 'ref' ? xr.ref : xr.phase === 'toe' ? xr.base : xr.surf).pop(); upd(); };
+  $('arRef').onclick = () => { if (xr.phase !== 'ref'){ xr.prev = xr.phase; xr.sweep = false; } xr.ref = []; xr.phase = 'ref'; upd(); };
+  $('arNext').onclick = () => { xr.phase = 'surf'; upd(); };
+  $('arSweep').onclick = () => { xr.sweep = !xr.sweep; upd(); };
+  $('arCancel').onclick = () => { xr.cancelled = true; session.end(); };
+  $('arFinish').onclick = () => session.end();
+  session.addEventListener('end', () => {
+    overlay.hidden = true;
+    if (!xr.cancelled && xr.base.length >= 3){ scan = {base: xr.base, surf: xr.surf, ref: xr.ref.length === 2 ? xr.ref : []}; scanIsSample = false; $('refDist').value = ''; render(); }
+    xr = null;
+  });
+  upd();
+
+  const project = (p, view) => {           // world point -> screen px via the view's matrices
+    const m = view.transform.inverse.matrix, P = view.projectionMatrix;
+    const v = [0,1,2,3].map(r => m[r]*p[0] + m[4+r]*p[1] + m[8+r]*p[2] + m[12+r]);
+    const c = [0,1,2,3].map(r => P[r]*v[0] + P[4+r]*v[1] + P[8+r]*v[2] + P[12+r]*v[3]);
+    if (c[3] <= 0) return null;
+    return [(c[0]/c[3] * 0.5 + 0.5) * cv.width, (1 - (c[1]/c[3] * 0.5 + 0.5)) * cv.height];
+  };
+  const sweepKeys = new Set();
+  session.requestAnimationFrame(function frame(t, f){
+    if (!xr) return;
+    session.requestAnimationFrame(frame);
+    const layer = session.renderState.baseLayer;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+    const pose = f.getViewerPose(refSpace); if (!pose) return;
+    const hits = f.getHitTestResults(hts);
+    xr.hit = null;
+    if (hits.length){ const hp = hits[0].getPose(refSpace); if (hp){ const q = hp.transform.position; xr.hit = [q.x, q.y, q.z]; } }
+    $('cross').classList.toggle('hit', !!xr.hit);
+    if (xr.sweep && xr.hit && xr.surf.length < 4000){
+      const k = xr.hit.map(v => Math.round(v / 0.2)).join(',');
+      if (!sweepKeys.has(k)){ sweepKeys.add(k); xr.surf.push(xr.hit); if (xr.surf.length % 10 === 0) upd(); }
+    }
+    // draw captured points over the camera image
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== innerWidth * dpr){ cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
+    g.clearRect(0, 0, cv.width, cv.height);
+    const view = pose.views[0];
+    g.fillStyle = 'rgba(242,183,5,.9)';
+    for (const p of xr.surf){ const s = project(p, view); if (s){ g.fillRect(s[0]-3*dpr, s[1]-3*dpr, 6*dpr, 6*dpr); } }
+    g.strokeStyle = '#fff'; g.lineWidth = 3 * dpr; g.beginPath();
+    xr.base.forEach((p, i) => { const s = project(p, view); if (s){ i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1]); } }); g.stroke();
+    g.fillStyle = '#fff';
+    for (const p of xr.base){ const s = project(p, view); if (s){ g.beginPath(); g.arc(s[0], s[1], 7*dpr, 0, 7); g.fill(); } }
+    g.fillStyle = '#4fc3f7';
+    for (const p of xr.ref){ const s = project(p, view); if (s){ g.beginPath(); g.arc(s[0], s[1], 9*dpr, 0, 7); g.fill(); } }
+  });
+};
+
+// ---------- boot ----------
+window.StockpileMath = {Tape, scanVolume, sampleScan};   // exposed for testing
+setUnits(imperial); setShape('cone');
+</script>
+
+</body>
+</html>
