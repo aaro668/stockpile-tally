@@ -84,7 +84,11 @@ ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .hist .acts select{width:auto;max-width:65%;font-size:13px;padding:4px 6px}
 .hist .del{background:none;border:0;color:var(--bad);font-size:12px;cursor:pointer;padding:0}
 .proj{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column}
-.proj-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+.proj-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding-bottom:8px;border-bottom:2px solid var(--accent);cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.proj-head h3::before{content:'▾';display:inline-block;width:1.1em;transition:transform .15s}
+.proj.collapsed .proj-head{padding-bottom:0;border-bottom:0}
+.proj.collapsed .proj-head h3::before{transform:rotate(-90deg)}
+.proj.collapsed > :not(.proj-head){display:none}
 .proj-head h3{margin:0;font:700 19px var(--display);text-transform:uppercase;letter-spacing:.5px}
 .proj-tot{font:500 14px var(--mono);font-variant-numeric:tabular-nums}
 .proj .item:last-child{border-bottom:0}
@@ -654,7 +658,7 @@ $('newProjForm').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('newProjName').value.trim(); if (!name) return;
   const p = {id: newId('p'), name, mod: Date.now()};
-  projects.push(p); store.set('sp.lastProj', p.id); changed();
+  projects.push(p); store.set('sp.lastProj', p.id); openProj.add(p.id); store.set('sp.openProj', [...openProj]); changed();
   $('newProjName').value = ''; $('newProjForm').hidden = true; refreshProjSel(); renderHist();
 });
 $('saveBtn').onclick = () => {
@@ -666,6 +670,7 @@ $('saveBtn').onclick = () => {
   $('saveBtn').textContent = 'Saved'; setTimeout(() => $('saveBtn').textContent = 'Save', 1500);
 };
 const projName = id => (projects.find(p => p.id === id) || {name: ''}).name;
+const openProj = new Set(store.get('sp.openProj', []));
 function renderHist(){
   const L = $('histList'); L.innerHTML = '';
   if (!hist.length && !projects.length){ L.innerHTML = '<p class="hint">Nothing saved yet. Create a project, then measure a pile and tap Save.</p>'; return; }
@@ -676,7 +681,13 @@ function renderHist(){
   groups.forEach(gp => {
     const box = document.createElement('section'); box.className = 'proj';
     const m3 = gp.items.reduce((s, h) => s + h.m3, 0), t = gp.items.reduce((s, h) => s + h.t, 0);
-    box.innerHTML = `<div class="proj-head"><h3></h3><span class="proj-tot"></span></div>`;
+    box.innerHTML = `<div class="proj-head" role="button" tabindex="0"><h3></h3><span class="proj-tot"></span></div>`;
+    // projects start collapsed; which ones you opened is remembered on this device only
+    const key = gp.id || '_none', head = box.querySelector('.proj-head');
+    const setOpen = o => { box.classList.toggle('collapsed', !o); head.setAttribute('aria-expanded', o); };
+    setOpen(openProj.has(key));
+    const toggle = () => { const o = !openProj.has(key); o ? openProj.add(key) : openProj.delete(key); store.set('sp.openProj', [...openProj]); setOpen(o); };
+    head.onclick = toggle; head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } };
     box.querySelector('h3').textContent = gp.name;
     box.querySelector('.proj-tot').textContent = gp.items.length
       ? `${gp.items.length} pile${gp.items.length > 1 ? 's' : ''} · ${nf(m3/YD3,1)} yd³ · ${nf(t/SHORT_TON,1)} tons` : 'No piles yet';
