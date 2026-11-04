@@ -953,18 +953,31 @@ $('arStart').onclick = async () => {
 
   xr = {session, phase: 'toe', prev: 'toe', base: [], surf: [], ref: [], cams: [], tick: 0, sweep: false, hit: null, frameN: 0,
         depth: !!(session.enabledFeatures && session.enabledFeatures.includes('depth-sensing') && session.depthUsage === 'cpu-optimized')};
-  // surface points only count inside the toe outline and at least 2 in above the ground fitted through the toe
-  const surfKeys = new Set();
-  const acceptSurf = p => {
-    const h = p[1] - xr.baseAt(p[0], p[2]);
-    if (h < 0.05 || !inPoly(p[0], p[2], xr.poly)) return false;
-    const k = p.map(v => Math.round(v / 0.08)).join(',');
-    if (!surfKeys.has(k)){ surfKeys.add(k); xr.surf.push(p); }
+  // surface points only count inside the toe outline and at least 2 in above the ground fitted through the toe.
+  // Sweep readings go into 4-in cubes; a cube only becomes a kept point once the sensor has hit it in
+  // 3 separate frames (from slightly different spots as you walk). One-off readings - flying pixels, glare,
+  // things passing by - never repeat, so they are dropped. The kept point is the average of all its hits.
+  const VOX = 0.1, NEED = 3;
+  let vox = new Map();
+  const onPile = p => p[1] - xr.baseAt(p[0], p[2]) >= 0.05 && inPoly(p[0], p[2], xr.poly);
+  const acceptSurf = (p, frame) => {
+    if (!onPile(p)) return false;
+    if (frame === undefined){ xr.surf.push(p); return true; }          // a deliberate tap is kept as is
+    const k = p.map(v => Math.round(v / VOX)).join(',');
+    let v = vox.get(k);
+    if (!v){
+      if (vox.size > 60000){ for (const [kk, vv] of vox) if (!vv.pt && frame - vv.f > 90) vox.delete(kk); }
+      v = {s: [0, 0, 0], n: 0, f: -1, c: 0, pt: null}; vox.set(k, v);
+    }
+    v.s[0] += p[0]; v.s[1] += p[1]; v.s[2] += p[2]; v.n++;
+    if (v.f !== frame){ v.f = frame; v.c++; }
+    if (v.pt){ for (let i = 0; i < 3; i++) v.pt[i] = v.s[i] / v.n; }
+    else if (v.c >= NEED && xr.surf.length < 8000){ v.pt = v.s.map(a => a / v.n); xr.surf.push(v.pt); }
     return true;
   };
   const cv = $('arCanvas'), g = cv.getContext('2d');
   const upd = () => {
-    $('arMeta').textContent = `Toe points ${xr.base.length} · Surface points ${xr.surf.length} · ${xr.depth ? 'depth sensor' : 'feature points'}`;
+    $('arMeta').textContent = `Toe points ${xr.base.length} · Surface points ${xr.surf.length}${xr.sweep ? ` (${vox.size} cubes checked)` : ''} · ${xr.depth ? 'depth sensor' : 'feature points'}`;
     $('arNext').hidden = xr.phase !== 'toe'; $('arSweep').hidden = $('arFinish').hidden = $('arClear').hidden = xr.phase !== 'surf';
     $('arNext').disabled = xr.base.length < 3;
     $('arRef').textContent = `Scale points ${xr.ref.length}/2`;
@@ -973,7 +986,7 @@ $('arStart').onclick = async () => {
       ? `Tap ${xr.ref.length ? 'the other end' : 'one end'} of the tape on the ground.`
       : xr.phase === 'toe'
       ? 'Aim the circle at the toe of the pile and tap the screen. Walk all the way around.'
-      : (xr.sweep ? 'Sweeping. Walk slowly around the pile 6–15 ft back, aiming at the faces and the top. Only points on the pile are kept.'
+      : (xr.sweep ? 'Sweeping. Walk slowly around the pile 6–15 ft back, aiming at the faces and the top. A dot only appears once the sensor has seen that spot 3 times, so stray readings are dropped.'
                   : 'Turn on Sweep and walk around the pile, or tap to add single points on it.');
     $('arSweep').textContent = 'Sweep: ' + (xr.sweep ? 'on' : 'off');
   };
@@ -999,7 +1012,7 @@ $('arStart').onclick = async () => {
   $('arUndo').onclick = () => { (xr.phase === 'ref' ? xr.ref : xr.phase === 'toe' ? xr.base : xr.surf).pop(); upd(); };
   $('arRef').onclick = () => { if (xr.phase !== 'ref'){ xr.prev = xr.phase; xr.sweep = false; } xr.ref = []; xr.phase = 'ref'; upd(); };
   $('arNext').onclick = () => { xr.baseAt = makeBase(xr.base); xr.poly = toePoly(xr.base); xr.phase = 'surf'; upd(); };
-  $('arClear').onclick = () => { xr.surf = []; surfKeys.clear(); upd(); };
+  $('arClear').onclick = () => { xr.surf = []; vox = new Map(); upd(); };
   $('arSweep').onclick = () => { xr.sweep = !xr.sweep; upd(); };
   $('arCancel').onclick = () => { xr.cancelled = true; session.end(); };
   $('arFinish').onclick = () => session.end();
@@ -1015,7 +1028,7 @@ $('arStart').onclick = async () => {
     const v = [0,1,2,3].map(r => m[r]*p[0] + m[4+r]*p[1] + m[8+r]*p[2] + m[12+r]);
     const c = [0,1,2,3].map(r => P[r]*v[0] + P[4+r]*v[1] + P[8+r]*v[2] + P[12+r]*v[3]);
     if (c[3] <= 0) return null;
-    return [(c[0]/c[3] * 0.5 + 0.5) * cv.width, (1 - (c[1]/c[3] * 0.5 + 0.5)) * cv.height];
+    return [(c[0]/c[3] * 0.5 + 0.5) * cv.width, (1 - (c[1]/c[3] * 0.5 + 0.5)) * cv.height, -v[2]];   // x, y, distance in front
   };
   session.requestAnimationFrame(function frame(t, f){
     if (!xr) return;
@@ -1064,10 +1077,10 @@ $('arStart').onclick = async () => {
         // depth sensor: sample a 9×9 grid over the middle of the screen
         try {
           for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++){
-            const p = depthAt(0.15 + 0.7 * i / 8, 0.15 + 0.7 * j / 8); if (p) acceptSurf(p);
+            const p = depthAt(0.15 + 0.7 * i / 8, 0.15 + 0.7 * j / 8); if (p) acceptSurf(p, xr.frameN);
           }
         } catch(e){ xr.depth = false; }
-      } else if (xr.hit) acceptSurf(xr.hit);
+      } else if (xr.hit) acceptSurf(xr.hit, xr.frameN);
       if (xr.frameN % 10 === 0) upd();
     }
     // draw captured points over the camera image
@@ -1075,8 +1088,17 @@ $('arStart').onclick = async () => {
     if (cv.width !== innerWidth * dpr){ cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
     g.clearRect(0, 0, cv.width, cv.height);
     const view = pose.views[0];
-    g.fillStyle = 'rgba(242,183,5,.9)';
-    for (const p of xr.surf){ const s = project(p, view); if (s){ g.fillRect(s[0]-3*dpr, s[1]-3*dpr, 6*dpr, 6*dpr); } }
+    // hide dots that are behind something: if the depth sensor sees a nearer surface at that spot on screen,
+    // the dot is on the far side of the pile (or behind a wall) and isn't drawn
+    const W = cv.width, H = cv.height, hidden = (s) => {
+      if (!di) return false;
+      const nx = s[0] / W, ny = s[1] / H;
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return true;
+      let d; try { d = di.getDepthInMeters(nx, ny); } catch(e){ return false; }
+      return d > 0 && s[2] > d + 0.12 + 0.04 * d;
+    };
+    g.fillStyle = di ? 'rgba(242,183,5,.9)' : 'rgba(242,183,5,.55)';
+    for (const p of xr.surf){ const s = project(p, view); if (s && !hidden(s)) g.fillRect(s[0]-2.5*dpr, s[1]-2.5*dpr, 5*dpr, 5*dpr); }
     // toe outline: always drawn closed and shaded once there are 3 points; while tapping the toe, a dashed
     // preview runs from the last point to where you're aiming and back to the first
     const ring = xr.base.slice();
