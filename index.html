@@ -64,6 +64,11 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid 
 .status{font-size:14px;padding:10px 12px;border-radius:6px;border-left:4px solid var(--muted);background:var(--bg)}
 .status.ok{border-left-color:var(--good)} .status.no{border-left-color:var(--bad)}
 canvas#map{width:100%;max-width:100%;aspect-ratio:1/1;background:var(--bg);border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:grab}
+.mapWrap{position:relative}
+.fsBtn{position:absolute;top:8px;right:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 10px;font:600 13px var(--body);cursor:pointer}
+.mapWrap.fs{position:fixed;inset:0;z-index:50;background:var(--bg);padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.mapWrap.fs canvas#map{width:100%;height:100%;aspect-ratio:auto;border:0;border-radius:0}
+.mapWrap.fs .fsBtn{top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));font-size:15px;padding:10px 14px}
 .lenin{display:flex;gap:6px}
 .lenin input{flex:1;min-width:0}
 .lenin select{width:auto;flex:0 0 auto;font-family:var(--mono);font-size:15px;padding:9px 6px}
@@ -194,7 +199,10 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
     </div>
     <div id="arResultBox" hidden>
       <div class="row" style="justify-content:space-between"><h2>3D view</h2><span class="tag" id="sampleTag" hidden>Sample data</span></div>
-      <canvas id="map" width="600" height="600" aria-label="Rotatable 3D model of the scanned pile"></canvas>
+      <div class="mapWrap" id="mapWrap">
+        <canvas id="map" width="600" height="600" aria-label="Rotatable 3D model of the scanned pile"></canvas>
+        <button class="fsBtn" id="fsBtn" type="button" aria-label="Full screen">⤢ Full screen</button>
+      </div>
       <p class="hint">Drag to rotate, pinch or scroll to zoom, double-tap to reset.</p>
       <p class="hint" id="scanStats"></p>
       <div id="scaleBox" class="panel" style="padding:12px;gap:8px">
@@ -247,7 +255,28 @@ textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);c
       <button class="btn ghost" id="copyCsv">Copy as CSV</button>
     </div>
     <textarea id="csvOut" hidden readonly></textarea>
-    <p class="hint">Saved on this phone only.</p>
+
+    <div class="panel" style="padding:12px;gap:10px;background:var(--bg)">
+      <h2>Sync between devices</h2>
+      <div id="syncStatus" class="status"></div>
+      <div id="syncOn" class="row" hidden>
+        <span class="hint" style="flex:1 1 100%">Connected to <b id="syncRepoName"></b>. Syncs after every change and whenever you open the app.</span>
+        <button class="btn" id="syncNowBtn" type="button">Sync now</button>
+        <button class="btn ghost" id="syncOff" type="button">Disconnect</button>
+      </div>
+      <div id="syncSetup" style="display:flex;flex-direction:column;gap:10px">
+        <p class="hint">Keeps projects, saved piles and density calibrations in a private GitHub repository, so your phone and PC show the same list. Set it up once on each device.</p>
+        <ol class="steps hint">
+          <li>Create a <b>private</b> GitHub repository named <b>stockpile-data</b>. Leave it empty.</li>
+          <li>Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained access token</a>. Under repository access pick <b>Only select repositories → stockpile-data</b>. Under permissions set <b>Contents: Read and write</b>.</li>
+          <li>Paste the token below and tap Connect. Do the same on your other devices.</li>
+        </ol>
+        <label>Repository (owner/name)<input id="syncRepo" type="text" value="aaro668/stockpile-data" autocapitalize="off" autocomplete="off" spellcheck="false" style="font-size:15px"></label>
+        <label>Access token<input id="syncToken" type="password" autocomplete="off" spellcheck="false" style="font-size:15px"></label>
+        <div class="row"><button class="btn" id="syncConnect" type="button">Connect</button></div>
+        <p class="hint">The token stays on this device. It is not part of the app's code.</p>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -307,11 +336,12 @@ const MATERIALS = [
   ['millings', 'Asphalt millings', 1.30],
   ['topsoil', 'Topsoil', 1.25],
 ];
-let calibrated = store.get('sp.cal', {});           // material key -> t/m³
+let calibrated = store.get('sp.cal', {});           // material key -> {d: t/m³, mod: time}
+for (const k in calibrated) if (typeof calibrated[k] === 'number') calibrated[k] = {d: calibrated[k], mod: 0};
 const matSel = $('material');
 MATERIALS.forEach(([k, n]) => { const o = document.createElement('option'); o.value = k; o.textContent = n; matSel.appendChild(o); });
 matSel.value = store.get('sp.mat', 'gravel');
-function baseDensity(k){ return calibrated[k] ?? MATERIALS.find(m => m[0] === k)[2]; }
+function baseDensity(k){ return calibrated[k]?.d ?? MATERIALS.find(m => m[0] === k)[2]; }
 function densityT_m3(){
   const v = parseFloat($('density').value);
   if (!(v > 0)) return NaN;
@@ -536,12 +566,16 @@ $('calBtn').onclick = () => {
   const t = parseFloat($('actualTons').value);
   if (!current || !(t > 0)){ $('calMsg').textContent = 'Enter the weighed amount for the pile measured above.'; return; }
   const d = t * SHORT_TON / current.vol;
-  calibrated[matSel.value] = +d.toFixed(3); store.set('sp.cal', calibrated);
+  calibrated[matSel.value] = {d: +d.toFixed(3), mod: Date.now()}; changed();
   $('calMsg').textContent = `Saved ${nf(d * YD3 / SHORT_TON, 2)} tons/yd³ for ${matSel.selectedOptions[0].text}.`;
   showDensity(); render();
 };
 let hist = store.get('sp.hist', []);
-let projects = store.get('sp.projects', []);            // [{id, name}]
+let projects = store.get('sp.projects', []);            // [{id, name, mod}]
+let deleted = store.get('sp.deleted', {});              // id -> time deleted, so a delete isn't undone by another device
+const newId = pre => pre + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+hist.forEach(h => { if (!h.id) h.id = newId('h'); if (h.mod == null) h.mod = 0; });
+projects.forEach(p => { if (p.mod == null) p.mod = 0; });
 function fillProjSelect(sel, val){
   sel.innerHTML = '';
   [{id: '', name: 'No project'}].concat(projects).forEach(p => {
@@ -556,16 +590,16 @@ $('newProjCancel').onclick = () => { $('newProjForm').hidden = true; $('newProjN
 $('newProjForm').addEventListener('submit', e => {
   e.preventDefault();
   const name = $('newProjName').value.trim(); if (!name) return;
-  const p = {id: 'p' + Date.now().toString(36), name};
-  projects.push(p); store.set('sp.projects', projects); store.set('sp.lastProj', p.id);
+  const p = {id: newId('p'), name, mod: Date.now()};
+  projects.push(p); store.set('sp.lastProj', p.id); changed();
   $('newProjName').value = ''; $('newProjForm').hidden = true; refreshProjSel(); renderHist();
 });
 $('saveBtn').onclick = () => {
   if (!current) return;
-  hist.unshift({ when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile', project: $('projSel').value,
+  hist.unshift({ id: newId('h'), mod: Date.now(), when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile', project: $('projSel').value,
     material: matSel.selectedOptions[0].text, method: current.method, m3: +current.vol.toFixed(2),
     dens: +current.dens.toFixed(3), t: +current.tons.toFixed(2), info: current.info });
-  store.set('sp.hist', hist);
+  changed();
   $('saveBtn').textContent = 'Saved'; setTimeout(() => $('saveBtn').textContent = 'Save', 1500);
 };
 const projName = id => (projects.find(p => p.id === id) || {name: ''}).name;
@@ -590,10 +624,10 @@ function renderHist(){
       d.querySelector('b').textContent = h.name;
       d.querySelector('.m').textContent = `${new Date(h.when).toLocaleString()} · ${h.material} · ${h.method}`;
       const sel = d.querySelector('select'); fillProjSelect(sel, valid(h.project));
-      sel.onchange = () => { h.project = sel.value; store.set('sp.hist', hist); renderHist(); };
+      sel.onchange = () => { h.project = sel.value; h.mod = Date.now(); changed(); renderHist(); };
       const del = d.querySelector('.del');
       del.onclick = () => {
-        if (del.dataset.armed){ hist.splice(hist.indexOf(h), 1); store.set('sp.hist', hist); renderHist(); }
+        if (del.dataset.armed){ hist.splice(hist.indexOf(h), 1); deleted[h.id] = Date.now(); changed(); renderHist(); }
         else { del.dataset.armed = 1; del.textContent = 'Tap again to delete'; }
       };
       box.appendChild(d);
@@ -603,8 +637,8 @@ function renderHist(){
       del.textContent = 'Delete project';
       del.onclick = () => {
         if (!del.dataset.armed){ del.dataset.armed = 1; del.textContent = 'Tap again. Its piles move to No project'; return; }
-        projects = projects.filter(p => p.id !== gp.id); store.set('sp.projects', projects);
-        hist.forEach(h => { if (h.project === gp.id) h.project = ''; }); store.set('sp.hist', hist);
+        projects = projects.filter(p => p.id !== gp.id); deleted[gp.id] = Date.now();
+        hist.forEach(h => { if (h.project === gp.id){ h.project = ''; h.mod = Date.now(); } }); changed();
         refreshProjSel(); renderHist();
       };
       box.appendChild(del);
@@ -621,6 +655,87 @@ $('copyCsv').onclick = async () => {
   catch(e){ ta.select(); $('copyCsv').textContent = 'Select and copy below'; }
 };
 
+// ---------- sync through one JSON file in a private GitHub repo ----------
+// Each device keeps its own copy; a sync pulls the file, merges by id (newest edit wins,
+// deletes are remembered), then writes it back. A write conflict just merges again.
+let syncCfg = store.get('sp.sync', null), syncBusy = false, syncAgain = false, syncTimer = null;
+const SYNC_FILE = 'stockpile-data.json';
+function saveLocal(){ store.set('sp.hist', hist); store.set('sp.projects', projects); store.set('sp.cal', calibrated); store.set('sp.deleted', deleted); }
+function changed(){
+  saveLocal();
+  if (syncCfg){ clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1200); setSyncStatus('Changes waiting to sync…'); }
+}
+const sortObj = o => Object.fromEntries(Object.keys(o || {}).sort().map(k => [k, o[k]]));
+function snapshotJSON(){
+  return JSON.stringify({ v: 1,
+    projects: [...projects].sort((a, b) => a.id < b.id ? -1 : 1),
+    hist: [...hist].sort((a, b) => a.when === b.when ? (a.id < b.id ? -1 : 1) : (a.when < b.when ? 1 : -1)),
+    cal: sortObj(calibrated), deleted: sortObj(deleted) }, null, 1);
+}
+function mergeById(local, remote){
+  const m = new Map();
+  for (const x of local) m.set(x.id, x);
+  for (const x of remote || []){ const o = m.get(x.id); if (!o || (x.mod || 0) > (o.mod || 0)) m.set(x.id, x); }
+  return [...m.values()].filter(x => !deleted[x.id]);
+}
+const b64enc = s => { const b = new TextEncoder().encode(s); let o = ''; for (let i = 0; i < b.length; i += 0x8000) o += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(o); };
+const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
+function setSyncStatus(msg, bad){ const s = $('syncStatus'); s.textContent = msg; s.className = 'status' + (bad ? ' no' : syncCfg ? ' ok' : ''); }
+const ghHeaders = extra => ({Authorization: 'Bearer ' + syncCfg.token, Accept: 'application/vnd.github+json', ...extra});
+const ghWhy = s => s === 401 ? 'GitHub rejected the token. Check it hasn’t expired.'
+  : s === 403 ? 'The token can’t write to that repository. Give it Contents: Read and write.'
+  : s === 404 ? 'Repository not found. Check the name and that the token includes it.' : 'GitHub error ' + s + '.';
+async function syncNow(){
+  if (!syncCfg) return;
+  if (syncBusy){ syncAgain = true; return; }
+  syncBusy = true; clearTimeout(syncTimer); setSyncStatus('Syncing…');
+  const url = `https://api.github.com/repos/${syncCfg.repo}/contents/${SYNC_FILE}`;
+  try {
+    for (let attempt = 0; ; attempt++){
+      const r = await fetch(url, {headers: ghHeaders(), cache: 'no-store'});
+      let remote = {}, sha, raw = '';
+      if (r.status === 200){ const j = await r.json(); sha = j.sha; raw = b64dec(j.content); remote = JSON.parse(raw); }
+      else if (r.status === 404){   // no data file yet is fine, a missing repo is not
+        const rr = await fetch(`https://api.github.com/repos/${syncCfg.repo}`, {headers: ghHeaders(), cache: 'no-store'});
+        if (!rr.ok) throw ghWhy(rr.status);
+      } else throw ghWhy(r.status);
+      Object.assign(deleted, remote.deleted || {});
+      projects = mergeById(projects, remote.projects);
+      hist = mergeById(hist, remote.hist);
+      for (const [k, v] of Object.entries(remote.cal || {})) if (!calibrated[k] || (v.mod || 0) > (calibrated[k].mod || 0)) calibrated[k] = v;
+      saveLocal();
+      const out = snapshotJSON();
+      if (out === raw) break;
+      const w = await fetch(url, {method: 'PUT', headers: ghHeaders({'Content-Type': 'application/json'}),
+        body: JSON.stringify({message: 'Update stockpile data', content: b64enc(out), ...(sha ? {sha} : {})})});
+      if (w.ok) break;
+      if ((w.status === 409 || w.status === 422) && attempt < 2) continue;   // another device saved first: merge again
+      throw ghWhy(w.status);
+    }
+    setSyncStatus('Synced at ' + new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}));
+  } catch(e){
+    setSyncStatus('Not synced. ' + (typeof e === 'string' ? e : navigator.onLine === false ? 'No signal; it will retry when you’re back online.' : 'Could not reach GitHub (' + e.message + ').'), true);
+  }
+  syncBusy = false;
+  refreshProjSel(); showDensity(); if (mode === 'hist') renderHist();
+  if (syncAgain){ syncAgain = false; syncNow(); }
+}
+function renderSyncUI(){
+  $('syncSetup').hidden = !!syncCfg; $('syncOn').hidden = !syncCfg;
+  if (syncCfg) $('syncRepoName').textContent = syncCfg.repo;
+  else setSyncStatus('Off. Saved piles stay on this device only.');
+}
+$('syncConnect').onclick = () => {
+  const repo = $('syncRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/(\.git|\/)$/, '');
+  const token = $('syncToken').value.trim();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token){ setSyncStatus('Enter the repository as owner/name and paste the token.', true); return; }
+  syncCfg = {repo, token}; store.set('sp.sync', syncCfg); $('syncToken').value = ''; renderSyncUI(); syncNow();
+};
+$('syncNowBtn').onclick = () => syncNow();
+$('syncOff').onclick = () => { syncCfg = null; store.set('sp.sync', null); renderSyncUI(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
+window.addEventListener('online', () => syncNow());
+
 // ---------- 3D view: shaded surface, painter's algorithm on a 2D canvas ----------
 const VIEW0 = {yaw: -0.7, pitch: 0.55, zoom: 1};
 const view3d = {...VIEW0, r: null};
@@ -628,10 +743,10 @@ function drawMap(r){
   if (r) view3d.r = r; r = view3d.r; if (!r) return;
   $('arResultBox').hidden = false; $('sampleTag').hidden = !scanIsSample;
   const cv = $('map'), dpr = window.devicePixelRatio || 1;
-  const Wpx = Math.round(Math.max(240, cv.clientWidth) * dpr);
-  if (cv.width !== Wpx){ cv.width = Wpx; cv.height = Wpx; }
-  const g = cv.getContext('2d'), S = cv.width, cs = getComputedStyle(document.documentElement);
-  g.clearRect(0, 0, S, S);
+  const Wpx = Math.round(Math.max(240, cv.clientWidth) * dpr), Hpx = Math.round(Math.max(240, cv.clientHeight) * dpr);
+  if (cv.width !== Wpx || cv.height !== Hpx){ cv.width = Wpx; cv.height = Hpx; }
+  const g = cv.getContext('2d'), CW = cv.width, CH = cv.height, S = Math.min(CW, CH), cs = getComputedStyle(document.documentElement);
+  g.clearRect(0, 0, CW, CH);
   let cx = 0, cy = 0; r.poly.forEach(p => { cx += p.x; cy += p.y; }); cx /= r.poly.length; cy /= r.poly.length;
   let span = 0; r.poly.forEach(p => span = Math.max(span, Math.hypot(p.x - cx, p.y - cy)));
   const sc = S * 0.4 / (span || 1) * view3d.zoom;
@@ -639,7 +754,7 @@ function drawMap(r){
   // world (x, y = plan, h = up) -> [screenX, screenY, depth]; larger depth = nearer the viewer
   const P = (x, y, h) => {
     const dx = x - cx, dz = y - cy, x1 = dx * cyw - dz * syw, z1 = dx * syw + dz * cyw;
-    return [S / 2 + x1 * sc, S * 0.58 - (h * cp - z1 * sp) * sc, h * sp + z1 * cp];
+    return [CW / 2 + x1 * sc, CH / 2 + S * 0.08 - (h * cp - z1 * sp) * sc, h * sp + z1 * cp];
   };
   const path = pts => { g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); };
   // ground footprint
@@ -679,7 +794,7 @@ function drawMap(r){
     if (!pts.has(e.pointerId)) return;
     const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pts.size === 1){
-      view3d.yaw += (e.clientX - prev[0]) * 0.012;
+      view3d.yaw -= (e.clientX - prev[0]) * 0.012;   // drag right turns the pile's front to the right
       view3d.pitch = Math.min(1.55, Math.max(0.05, view3d.pitch + (e.clientY - prev[1]) * 0.01));
     } else if (pts.size === 2 && pinch0){
       const [a, b] = [...pts.values()]; view3d.zoom = clampZ(zoom0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0);
@@ -690,6 +805,23 @@ function drawMap(r){
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); view3d.zoom = clampZ(view3d.zoom * Math.exp(-e.deltaY * 0.0015)); drawMap(); }, {passive: false});
   window.addEventListener('resize', () => { if (mode === 'ar') drawMap(); });
+  // full screen: CSS overlay always, plus the browser's real full screen where allowed
+  const wrap = $('mapWrap'), btn = $('fsBtn');
+  const setFs = on => {
+    wrap.classList.toggle('fs', on); btn.textContent = on ? '✕ Close' : '⤢ Full screen';
+    document.body.style.overflow = on ? 'hidden' : '';
+    requestAnimationFrame(() => drawMap());
+  };
+  btn.addEventListener('click', async () => {
+    const on = !wrap.classList.contains('fs');
+    setFs(on);
+    try {
+      if (on && wrap.requestFullscreen) await wrap.requestFullscreen();
+      else if (!on && document.fullscreenElement) await document.exitFullscreen();
+    } catch(e){}
+  });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && wrap.classList.contains('fs')) setFs(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && wrap.classList.contains('fs')) setFs(false); });
 })();
 
 // ---------- sample scan (synthetic, irregular pile on sloping ground) ----------
@@ -819,7 +951,7 @@ $('arStart').onclick = async () => {
 
 // ---------- boot ----------
 window.StockpileMath = {Tape, scanVolume, sampleScan};   // exposed for testing
-showDensity(); refreshProjSel(); setShape('cone');
+showDensity(); refreshProjSel(); setShape('cone'); renderSyncUI(); syncNow();
 </script>
 
 </body>
