@@ -1,0 +1,1171 @@
+<title>Stockpile Tally</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#1d2329">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column, phone-first field tool. Tabs on top, live result card pinned under inputs. */
+:root{
+  --bg:#eef0f1; --panel:#ffffff; --ink:#1d2329; --muted:#5d6872; --line:#d3d8dc;
+  --accent:#f2b705; --accent-ink:#1d2329; --steel:#38434d; --good:#2e7d4f; --bad:#b3261e;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14191d; --panel:#1d2329; --ink:#e7eaec; --muted:#9aa5ae; --line:#323b43;
+  --accent:#f2b705; --accent-ink:#14191d; --steel:#c9d1d7; --good:#5cc489; --bad:#ff8a80; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14191d; --panel:#1d2329; --ink:#e7eaec; --muted:#9aa5ae; --line:#323b43;
+  --accent:#f2b705; --accent-ink:#14191d; --steel:#c9d1d7; --good:#5cc489; --bad:#ff8a80; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding-block:16px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-size:34px;letter-spacing:.5px;margin:0;line-height:1;text-transform:uppercase}
+h1 span{background:var(--accent);color:var(--accent-ink);padding:0 6px}
+h2{font-family:var(--display);font-size:20px;text-transform:uppercase;letter-spacing:.6px;margin:0}
+.units{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.units button{border:0;background:transparent;color:var(--muted);padding:6px 12px;font:600 13px var(--body);cursor:pointer}
+.units button[aria-pressed="true"]{background:var(--steel);color:var(--bg)}
+nav.tabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:2px solid var(--line)}
+nav.tabs button{border:0;background:none;color:var(--muted);font:700 17px var(--display);text-transform:uppercase;letter-spacing:.6px;padding:10px 4px;cursor:pointer;border-bottom:4px solid transparent;margin-bottom:-2px}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{flex:1 1 0;min-width:90px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:8px 6px;font:600 14px var(--body);cursor:pointer}
+.seg button[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:380px){.grid2{grid-template-columns:1fr}}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+input,select{font:500 17px var(--mono);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%}
+select{font-family:var(--body);font-size:15px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.diagram{display:flex;justify-content:center}
+.diagram svg{max-width:100%;height:auto}
+.result{background:var(--steel);color:var(--bg);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.result .big{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.result .k{font:600 12px var(--body);text-transform:uppercase;letter-spacing:.8px;opacity:.75}
+.result .v{font:700 38px/1 var(--display);font-variant-numeric:tabular-nums}
+.result .v small{font:600 16px var(--display);margin-left:4px;opacity:.8}
+.result .sub{font:500 13px var(--mono);opacity:.8;font-variant-numeric:tabular-nums}
+.result .err{color:var(--accent);font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:0;border-radius:6px;padding:11px 16px;font:700 16px var(--display);text-transform:uppercase;letter-spacing:.6px;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:14px;padding:10px 12px;border-radius:6px;border-left:4px solid var(--muted);background:var(--bg)}
+.status.ok{border-left-color:var(--good)} .status.no{border-left-color:var(--bad)}
+canvas#map{width:100%;max-width:100%;aspect-ratio:1/1;background:var(--bg);border:1px solid var(--line);border-radius:6px;touch-action:none;cursor:grab}
+.mapWrap{position:relative}
+.fsBtn{position:absolute;top:8px;right:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 10px;font:600 13px var(--body);cursor:pointer}
+.mapWrap.fs{position:fixed;inset:0;z-index:50;background:var(--bg);padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.mapWrap.fs canvas#map{width:100%;height:100%;aspect-ratio:auto;border:0;border-radius:0}
+.mapWrap.fs .fsBtn{top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));font-size:15px;padding:10px 14px}
+.lenin{display:flex;gap:6px}
+.lenin input{flex:1;min-width:0}
+.lenin select{width:auto;flex:0 0 auto;font-family:var(--mono);font-size:15px;padding:9px 6px}
+ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.tag{display:inline-block;font:600 11px var(--body);text-transform:uppercase;letter-spacing:.8px;background:var(--accent);color:var(--accent-ink);padding:2px 6px;border-radius:3px}
+.hist{display:flex;flex-direction:column;gap:8px}
+.hist .item{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hist .item b{font-weight:600}
+.hist .item .n{font:500 14px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.hist .item .m{font-size:12px;color:var(--muted);grid-column:1/-1}
+.hist .acts{grid-column:1/-1;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.hist .acts .view3d{margin-left:auto;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font-weight:600}
+.hist .acts select{width:auto;max-width:65%;font-size:13px;padding:4px 6px}
+.hist .del{background:none;border:0;color:var(--bad);font-size:12px;cursor:pointer;padding:0}
+.proj{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column}
+.proj-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;padding-bottom:8px;border-bottom:2px solid var(--accent);cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.proj-head h3::before{content:'▾';display:inline-block;width:1.1em;transition:transform .15s}
+.proj.collapsed .proj-head{padding-bottom:0;border-bottom:0}
+.proj.collapsed .proj-head h3::before{transform:rotate(-90deg)}
+.proj.collapsed > :not(.proj-head){display:none}
+.proj-head h3{margin:0;font:700 19px var(--display);text-transform:uppercase;letter-spacing:.5px}
+.proj-tot{font:500 14px var(--mono);font-variant-numeric:tabular-nums}
+.proj .item:last-child{border-bottom:0}
+textarea{width:100%;min-height:90px;font:12px var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+/* AR overlay */
+#arOverlay{position:fixed;inset:0;pointer-events:none;font-family:var(--body);color:#fff}
+#arOverlay canvas{position:absolute;inset:0;width:100%;height:100%}
+#arOverlay .cross{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+#arOverlay .cross.hit{border-color:#f2b705}
+#arOverlay .cross::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;background:currentColor;border-radius:50%}
+#aimTxt{position:absolute;left:0;right:0;top:calc(50% + 30px);text-align:center;font:600 14px var(--mono);color:#fff;text-shadow:0 0 3px #000,0 0 6px #000}
+#arTop{position:absolute;top:0;left:0;right:0;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;background:rgba(20,25,29,.78);font-size:15px}
+#arTop b{font-family:var(--display);font-size:22px;text-transform:uppercase;letter-spacing:.5px;display:block;color:#f2b705}
+#arBottom{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom,0px));background:rgba(20,25,29,.78);display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+#arBottom .row .btn{flex:1}
+#arBottom .meta{font:500 13px var(--mono);color:#cfd6db}
+#arBottom .btn.ghost{color:#fff;border-color:rgba(255,255,255,.4)}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span>Stockpile</span> Tally</h1>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tabTape" aria-selected="true">Measure</button>
+    <button role="tab" id="tabAR" aria-selected="false">AR scan</button>
+    <button role="tab" id="tabHist" aria-selected="false">Saved</button>
+  </nav>
+
+  <!-- Material is shared by both measuring modes -->
+  <section class="panel" id="materialPanel">
+    <div class="grid2">
+      <label>Material
+        <select id="material"></select>
+      </label>
+      <label><span id="densLabel">Bulk density (tons/yd³)</span>
+        <input id="density" type="number" inputmode="decimal" step="0.01" min="0.1">
+      </label>
+    </div>
+    <p class="hint">Loose stockpile densities vary with moisture and grading. Calibrate against a scale ticket once and the app remembers it.</p>
+  </section>
+
+  <!-- TAPE MODE -->
+  <section id="viewTape" class="panel">
+    <h2>Pile shape</h2>
+    <div class="seg" role="group" aria-label="Pile shape">
+      <button data-shape="cone" aria-pressed="true">Cone</button>
+      <button data-shape="windrow" aria-pressed="false">Long pile</button>
+      <button data-shape="flat" aria-pressed="false">Flat top</button>
+      <button data-shape="rect" aria-pressed="false">Rectangle</button>
+    </div>
+    <div class="diagram" id="diagram"></div>
+
+    <div id="coneIn" class="grid2">
+      <label>Measure by
+        <select id="coneMethod">
+          <option value="ott">Circumference + over the top</option>
+          <option value="dh">Diameter + height</option>
+        </select>
+      </label>
+      <span></span>
+      <label id="lC">Circumference at toe<input id="cC" class="len" type="number" inputmode="decimal" step="any" value="100"></label>
+      <label id="lO">Over the top, toe to toe<input id="cO" class="len" type="number" inputmode="decimal" step="any" value="46"></label>
+      <label id="lD" hidden>Base diameter<input id="cD" class="len" type="number" inputmode="decimal" step="any" value="32"></label>
+      <label id="lH" hidden>Height<input id="cH" class="len" type="number" inputmode="decimal" step="any" value="10"></label>
+    </div>
+
+    <div id="windIn" class="grid2" hidden>
+      <label>Length, toe to toe<input id="wL" class="len" type="number" inputmode="decimal" step="any" value="80"></label>
+      <label>Width, toe to toe<input id="wW" class="len" type="number" inputmode="decimal" step="any" value="30"></label>
+      <label>Height by
+        <select id="windMethod">
+          <option value="ott">Over the top (across width)</option>
+          <option value="h">Measured height</option>
+        </select>
+      </label>
+      <label id="lwO">Over the top<input id="wO" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label id="lwH" hidden>Height<input id="wH" class="len" type="number" inputmode="decimal" step="any" value="11"></label>
+    </div>
+
+    <div id="flatIn" class="grid2" hidden>
+      <label>Base length<input id="fL" class="len" type="number" inputmode="decimal" step="any" value="65"></label>
+      <label>Base width<input id="fW" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label>Top length<input id="fl" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label>Top width<input id="fw" class="len" type="number" inputmode="decimal" step="any" value="13"></label>
+      <label>Height<input id="fH" class="len" type="number" inputmode="decimal" step="any" value="10"></label>
+    </div>
+
+    <div id="rectIn" class="grid2" hidden>
+      <label>Length<input id="rL" class="len" type="number" inputmode="decimal" step="any" value="50"></label>
+      <label>Width<input id="rW" class="len" type="number" inputmode="decimal" step="any" value="40"></label>
+      <label>Height or depth<input id="rH" class="len" type="number" inputmode="decimal" step="any" value="1"></label>
+    </div>
+    <p class="hint" id="tapeHint">Walk a tape around the toe of the pile for the circumference, then throw it over the peak from toe to toe. No need to climb the pile.</p>
+  </section>
+
+  <!-- AR MODE -->
+  <section id="viewAR" class="panel" hidden>
+    <h2>Walk-around scan</h2>
+    <div id="arSupport" class="status">Checking whether this phone supports AR…</div>
+    <ol class="steps">
+      <li><b>Toe:</b> walk around the pile and tap where it meets the ground, every 5–10 ft and at every bend (8+ taps). The outline closes itself and shades in. Tap the first point again, or tap Next, when you're back to the start. On uneven ground, the height of each toe tap is used, so tap right at the base all the way round.</li>
+      <li><b>Surface:</b> tap Next, turn on Sweep, and walk slowly around the pile 6–15 ft back, aiming at the faces and the top. Only points inside the toe outline and above the ground are kept. Tap Clear to start the surface again.</li>
+      <li><b>Scale check (optional):</b> lay a tape on the ground, tap Scale points, then tap both ends. Enter the tape distance after the scan to correct tracking drift.</li>
+      <li><b>Finish:</b> the app fits the ground, builds a surface and integrates the volume.</li>
+    </ol>
+    <div class="row">
+      <button class="btn" id="arStart" disabled>Start AR scan</button>
+      <button class="btn ghost" id="arDemo">Load sample scan</button>
+    </div>
+    <div id="arResultBox" hidden>
+      <div class="row" style="justify-content:space-between"><h2>3D view</h2><span class="tag" id="sampleTag" hidden>Sample data</span></div>
+      <div class="mapWrap" id="mapWrap">
+        <canvas id="map" width="600" height="600" aria-label="Rotatable 3D model of the scanned pile"></canvas>
+        <button class="fsBtn" id="fsBtn" type="button" aria-label="Full screen">⤢ Full screen</button>
+      </div>
+      <p class="hint">Drag to rotate, pinch or scroll to zoom, double-tap to reset.</p>
+      <p class="hint" id="scanStats"></p>
+      <div class="row">
+        <button class="btn ghost" id="scanExport" type="button">Export scan data</button>
+        <span class="hint" id="exportMsg" style="flex:1;min-width:0">Raw points for troubleshooting. With sync on, this uploads to your data repo.</span>
+      </div>
+      <div id="scaleBox" class="panel" style="padding:12px;gap:8px">
+        <h2>Scale check</h2>
+        <p class="hint" id="scaleInfo"></p>
+        <label>Tape distance between the two scale points
+          <input id="refDist" class="len" type="number" inputmode="decimal" step="any" placeholder="e.g. 25">
+        </label>
+      </div>
+    </div>
+    <p class="hint">Works on ARCore phones in Chrome. Best for piles up to about 20 ft tall in daylight; the camera can't see the top of very tall piles from the ground, so those come out low. Use a drone survey for large piles.</p>
+  </section>
+
+  <!-- RESULT -->
+  <section class="result" id="resultCard">
+    <div class="big">
+      <div><div class="k">Volume</div><div class="v" id="rVol">—</div></div>
+      <div><div class="k">Weight</div><div class="v" id="rTon">—</div></div>
+    </div>
+    <div class="sub" id="rSub"></div>
+    <div class="sub err" id="rErr" hidden></div>
+    <div class="row">
+      <input id="pileName" type="text" placeholder="Pile name, e.g. North yard 3/4 clear" style="flex:1 1 100%;min-width:0;font-family:var(--body);font-size:15px">
+      <select id="projSel" aria-label="Project" style="flex:1;min-width:0"></select>
+      <button class="btn" id="saveBtn">Save</button>
+    </div>
+    <details>
+      <summary class="sub" style="cursor:pointer">Calibrate density from a scale ticket</summary>
+      <div class="row" style="margin-top:8px">
+        <input id="actualTons" type="number" inputmode="decimal" step="any" placeholder="Weighed tons" style="flex:1">
+        <button class="btn" id="calBtn">Calibrate</button>
+      </div>
+      <p class="sub" id="calMsg"></p>
+    </details>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="viewHist" class="panel" hidden>
+    <div class="row" style="justify-content:space-between">
+      <h2>Saved estimates</h2>
+      <button class="btn" id="newProjBtn">New project</button>
+    </div>
+    <form id="newProjForm" class="row" hidden>
+      <input id="newProjName" type="text" placeholder="Project name, e.g. Smith driveway" style="flex:1;min-width:0;font-family:var(--body);font-size:15px">
+      <button class="btn" type="submit">Create</button>
+      <button class="btn ghost" type="button" id="newProjCancel">Cancel</button>
+    </form>
+    <div class="hist" id="histList"></div>
+    <div class="row">
+      <button class="btn ghost" id="copyCsv">Copy as CSV</button>
+    </div>
+    <textarea id="csvOut" hidden readonly></textarea>
+
+    <div class="panel" style="padding:12px;gap:10px;background:var(--bg)">
+      <h2>Sync between devices</h2>
+      <div id="syncStatus" class="status"></div>
+      <div id="syncOn" class="row" hidden>
+        <span class="hint" style="flex:1 1 100%">Connected to <b id="syncRepoName"></b>. Syncs after every change and whenever you open the app.</span>
+        <button class="btn" id="syncNowBtn" type="button">Sync now</button>
+        <button class="btn ghost" id="syncOff" type="button">Disconnect</button>
+      </div>
+      <div id="syncSetup" style="display:flex;flex-direction:column;gap:10px">
+        <p class="hint">Keeps projects, saved piles and density calibrations in a private GitHub repository, so your phone and PC show the same list. Set it up once on each device.</p>
+        <ol class="steps hint">
+          <li>Create a <b>private</b> GitHub repository named <b>stockpile-data</b>. Leave it empty.</li>
+          <li>Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained access token</a>. Under repository access pick <b>Only select repositories → stockpile-data</b>. Under permissions set <b>Contents: Read and write</b>.</li>
+          <li>Paste the token below and tap Connect. Do the same on your other devices.</li>
+        </ol>
+        <label>Repository (owner/name)<input id="syncRepo" type="text" value="aaro668/stockpile-data" autocapitalize="off" autocomplete="off" spellcheck="false" style="font-size:15px"></label>
+        <label>Access token<input id="syncToken" type="password" autocomplete="off" spellcheck="false" style="font-size:15px"></label>
+        <div class="row"><button class="btn" id="syncConnect" type="button">Connect</button></div>
+        <p class="hint">The token stays on this device. It is not part of the app's code.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- AR overlay (lives outside .wrap so it can cover the screen) -->
+<div id="arOverlay" hidden>
+  <canvas id="arCanvas"></canvas>
+  <div class="cross" id="cross"></div>
+  <div id="aimTxt"></div>
+  <div id="arTop"><b id="arPhase">Step 1 · Toe</b><span id="arMsg">Aim the circle at the toe of the pile and tap the screen.</span></div>
+  <div id="arBottom">
+    <div class="meta" id="arMeta">Toe points 0 · Surface points 0</div>
+    <div class="row">
+      <button class="btn ghost" id="arUndo">Undo</button>
+      <button class="btn ghost" id="arRef">Scale points 0/2</button>
+      <button class="btn" id="arNext">Next: surface</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="arSweep" hidden>Sweep: off</button>
+      <button class="btn ghost" id="arClear" hidden>Clear</button>
+      <button class="btn" id="arFinish" hidden>Finish</button>
+      <button class="btn ghost" id="arCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- units & storage ----------
+const FT = 0.3048, YD3 = 0.764554858, SHORT_TON = 0.90718474;
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const $ = id => document.getElementById(id);
+// every length box gets its own ft / in picker (ft default); values are converted when the unit changes
+document.querySelectorAll('input.len').forEach(inp => {
+  const w = document.createElement('div'); w.className = 'lenin';
+  inp.replaceWith(w); w.appendChild(inp);
+  const s = document.createElement('select'); s.id = inp.id + 'U'; s.setAttribute('aria-label', 'Unit');
+  s.innerHTML = '<option value="ft">ft</option><option value="in">in</option>';
+  s.addEventListener('change', () => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v)) inp.value = +(s.value === 'in' ? v * 12 : v / 12).toFixed(2);
+    render();
+  });
+  w.appendChild(s);
+});
+
+// Typical loose bulk densities, tonnes per cubic metre
+const MATERIALS = [
+  ['gravel', 'Gravel, loose dry', 1.52],
+  ['gravelwet', 'Gravel, wet', 1.92],
+  ['pea', 'Pea gravel', 1.60],
+  ['clear', 'Crushed stone / ¾" clear', 1.60],
+  ['granA', 'Road base (Granular A / crusher run)', 1.80],
+  ['sand', 'Sand, dry', 1.55],
+  ['sandwet', 'Sand, wet', 1.92],
+  ['riprap', 'Rip-rap / large rock', 1.60],
+  ['concrete', 'Recycled concrete', 1.45],
+  ['millings', 'Asphalt millings', 1.30],
+  ['topsoil', 'Topsoil', 1.25],
+];
+let calibrated = store.get('sp.cal', {});           // material key -> {d: t/m³, mod: time}
+for (const k in calibrated) if (typeof calibrated[k] === 'number') calibrated[k] = {d: calibrated[k], mod: 0};
+const matSel = $('material');
+MATERIALS.forEach(([k, n]) => { const o = document.createElement('option'); o.value = k; o.textContent = n; matSel.appendChild(o); });
+matSel.value = store.get('sp.mat', 'gravel');
+function baseDensity(k){ return calibrated[k]?.d ?? MATERIALS.find(m => m[0] === k)[2]; }
+function densityT_m3(){
+  const v = parseFloat($('density').value);
+  if (!(v > 0)) return NaN;
+  return v * SHORT_TON / YD3;                          // input is short tons / yd³
+}
+function showDensity(){
+  const d = baseDensity(matSel.value);
+  $('density').value = (d * YD3 / SHORT_TON).toFixed(2);
+  $('densLabel').textContent = 'Bulk density (tons/yd³)' + (calibrated[matSel.value] ? ' · calibrated' : '');
+}
+matSel.addEventListener('change', () => { store.set('sp.mat', matSel.value); showDensity(); render(); });
+$('density').addEventListener('input', render);
+
+// ---------- geometry: tape formulas (all metres) ----------
+const Tape = {
+  cone({method, C, O, D, H}){
+    let r, h;
+    if (method === 'ott'){
+      r = C / (2 * Math.PI); const s = O / 2;
+      if (!(s > r)) throw 'Over-the-top must be longer than the base diameter (' + fmtLen(2 * r) + ').';
+      h = Math.sqrt(s * s - r * r);
+    } else { r = D / 2; h = H; }
+    return { vol: Math.PI * r * r * h / 3, info: `Ø ${fmtLen(2 * r)} · height ${fmtLen(h)} · slope ${(Math.atan2(h, r) * 180 / Math.PI).toFixed(0)}°` };
+  },
+  windrow({L, W, method, O, H}){
+    let h = H;
+    if (method === 'ott'){
+      const s = O / 2, r = W / 2;
+      if (!(s > r)) throw 'Over-the-top must be longer than the width.';
+      h = Math.sqrt(s * s - r * r);
+    }
+    if (L < W) throw 'Length should be at least the width. For a round pile use Cone.';
+    // half-cone ends (together one cone of diameter W) + triangular prism in the middle
+    const vol = Math.PI * W * W * h / 12 + (L - W) * W * h / 2;
+    return { vol, info: `height ${fmtLen(h)} · slope ${(Math.atan2(h, W / 2) * 180 / Math.PI).toFixed(0)}°` };
+  },
+  flat({L, W, l, w, H}){
+    if (l > L || w > W) throw 'Top must be smaller than the base.';
+    const A1 = L * W, A2 = l * w, Am = ((L + l) / 2) * ((W + w) / 2);
+    return { vol: H / 6 * (A1 + A2 + 4 * Am), info: `base ${fmtArea(A1)} · top ${fmtArea(A2)}` };   // prismoidal formula
+  },
+  rect({L, W, H}){
+    return { vol: L * W * H, info: `area ${fmtArea(L * W)} · depth ${fmtLen(H)}` };
+  }
+};
+
+// ---------- geometry: point-cloud volume ----------
+// points are [x, y, z] metres with y up (WebXR convention)
+function fitPlane(pts){                 // least squares y = a x + b z + c
+  let sxx=0,sxz=0,szz=0,sx=0,sz=0,n=pts.length,sxy=0,szy=0,sy=0;
+  for (const [x,y,z] of pts){ sxx+=x*x; sxz+=x*z; szz+=z*z; sx+=x; sz+=z; sxy+=x*y; szy+=z*y; sy+=y; }
+  const M = [[sxx,sxz,sx],[sxz,szz,sz],[sx,sz,n]], v = [sxy,szy,sy];
+  const det = m => m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1]) - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0]) + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+  const D = det(M);
+  if (Math.abs(D) < 1e-9){ return {a:0,b:0,c:sy/n}; }
+  const col = i => M.map((r,k) => r.map((e,j) => j===i ? v[k] : e));
+  return { a: det(col(0))/D, b: det(col(1))/D, c: det(col(2))/D };
+}
+function delaunay(P){                   // Bowyer–Watson, P = [{x,y}], returns triangles as index triples
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for (const p of P){ minX=Math.min(minX,p.x); minY=Math.min(minY,p.y); maxX=Math.max(maxX,p.x); maxY=Math.max(maxY,p.y); }
+  const d = Math.max(maxX-minX, maxY-minY) * 20 + 1, mx=(minX+maxX)/2, my=(minY+maxY)/2;
+  const pts = P.concat([{x:mx-d,y:my-d},{x:mx,y:my+d},{x:mx+d,y:my-d}]);
+  const n = P.length;
+  const circ = (i,j,k) => {
+    const A=pts[i],B=pts[j],C=pts[k];
+    const D2 = 2*(A.x*(B.y-C.y)+B.x*(C.y-A.y)+C.x*(A.y-B.y));
+    const a2=A.x*A.x+A.y*A.y, b2=B.x*B.x+B.y*B.y, c2=C.x*C.x+C.y*C.y;
+    const ux=(a2*(B.y-C.y)+b2*(C.y-A.y)+c2*(A.y-B.y))/D2, uy=(a2*(C.x-B.x)+b2*(A.x-C.x)+c2*(B.x-A.x))/D2;
+    return {i,j,k,ux,uy,r2:(A.x-ux)**2+(A.y-uy)**2};
+  };
+  let tris = [circ(n,n+1,n+2)];
+  for (let p = 0; p < n; p++){
+    const {x,y} = pts[p], bad = [], keep = [];
+    for (const t of tris) ((x-t.ux)**2+(y-t.uy)**2 < t.r2 ? bad : keep).push(t);
+    const edges = new Map();
+    for (const t of bad) for (const [a,b] of [[t.i,t.j],[t.j,t.k],[t.k,t.i]]){
+      const key = a<b ? a+','+b : b+','+a;
+      edges.has(key) ? edges.delete(key) : edges.set(key,[a,b]);
+    }
+    for (const [a,b] of edges.values()) keep.push(circ(a,b,p));
+    tris = keep;
+  }
+  return tris.filter(t => t.i<n && t.j<n && t.k<n).map(t => [t.i,t.j,t.k]);
+}
+function inPoly(x, y, poly){
+  let inside = false;
+  for (let i=0, j=poly.length-1; i<poly.length; j=i++){
+    const a=poly[i], b=poly[j];
+    if ((a.y>y) !== (b.y>y) && x < (b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x) inside = !inside;
+  }
+  return inside;
+}
+function median(a){ const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function pct(a, q){ const s = [...a].sort((x, y) => x - y), i = (s.length - 1) * q, lo = Math.floor(i); return s[lo] + (s[Math.ceil(i)] - s[lo]) * (i - lo); }
+// Ground under the pile, for level or uneven ground: the toe points are where the pile meets the real
+// ground, so the hidden ground beneath is built by joining the toe points' own heights into triangles
+// (the usual stockpile "toe base"). A slope, a dip or a hump along the toe is followed exactly.
+function makeBase(base){
+  const P = base.map(p => ({x: p[0], y: p[2], h: p[1]}));
+  const T = delaunay(P);
+  return (x, y) => {
+    for (const [i, j, k] of T){
+      const A = P[i], B = P[j], C = P[k];
+      const d = (B.y - C.y) * (A.x - C.x) + (C.x - B.x) * (A.y - C.y); if (Math.abs(d) < 1e-12) continue;
+      const l1 = ((B.y - C.y) * (x - C.x) + (C.x - B.x) * (y - C.y)) / d;
+      const l2 = ((C.y - A.y) * (x - C.x) + (A.x - C.x) * (y - C.y)) / d, l3 = 1 - l1 - l2;
+      if (l1 >= -1e-9 && l2 >= -1e-9 && l3 >= -1e-9) return l1 * A.h + l2 * B.h + l3 * C.h;
+    }
+    let best = P[0], bd = Infinity;            // outside all toe triangles: nearest toe point
+    for (const p of P){ const dd = (p.x - x) ** 2 + (p.y - y) ** 2; if (dd < bd){ bd = dd; best = p; } }
+    return best.h;
+  };
+}
+function selfIntersects(P){
+  const n = P.length, cr = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++){
+    if (i === 0 && j === n - 1) continue;
+    const a = P[i], b = P[(i + 1) % n], c = P[j], d = P[(j + 1) % n];
+    if (cr(a, b, c) * cr(a, b, d) < 0 && cr(c, d, a) * cr(c, d, b) < 0) return true;
+  }
+  return false;
+}
+// toe outline in the order tapped (so kidney and L-shaped piles work); if the taps cross over
+// themselves, fall back to ordering by angle around the centre
+function toePoly(base){
+  const P = base.map(p => ({x: p[0], y: p[2], h: 0}));
+  if (!selfIntersects(P)) return P;
+  let cx = 0, cz = 0; P.forEach(p => { cx += p.x; cz += p.y; }); cx /= P.length; cz /= P.length;
+  return P.sort((a, b) => Math.atan2(a.y - cz, a.x - cx) - Math.atan2(b.y - cz, b.x - cx));
+}
+function scanVolume(base, surf){
+  if (base.length < 3) throw 'Need at least 3 toe points.';
+  const baseAt = makeBase(base);
+  const hOf = ([x,y,z]) => y - baseAt(x, z);
+  const poly = toePoly(base);
+  // thin surface points on a 15 cm grid. Every real reading is on or under the top surface (walls and sides
+  // sit below it), so take the 75th-percentile height per cell rather than the median
+  const bins = new Map();
+  for (const p of surf){
+    const h = hOf(p); if (h < 0.03) continue;
+    if (!inPoly(p[0], p[2], poly)) continue;
+    const key = Math.round(p[0]/0.15)+','+Math.round(p[2]/0.15);
+    let b = bins.get(key); if (!b) bins.set(key, b = {xs:0, ys:0, hs:[]});
+    b.xs += p[0]; b.ys += p[2]; b.hs.push(h);
+  }
+  let cellsArr = [...bins.values()].map(b => ({x: b.xs/b.hs.length, y: b.ys/b.hs.length, h: pct(b.hs, 0.75)}));
+  // one point per cell is all a saved scan needs to rebuild the same surface and volume later
+  const keep = cellsArr.map(c => [c.x, baseAt(c.x, c.y) + c.h, c.y]);
+  // drop spikes: a cell more than 0.5 m above its neighbours (within 0.6 m) is a bad reading
+  cellsArr = cellsArr.filter(c => {
+    const nb = cellsArr.filter(o => o !== c && (o.x-c.x)**2 + (o.y-c.y)**2 < 0.36).map(o => o.h);
+    return nb.length < 3 || c.h <= median(nb) + 0.5;
+  });
+  const cells = {size: cellsArr.length};
+  // the toe is ground (height 0) along its whole length, not just at the tapped corners: add a ground point
+  // every ~1 ft along each edge so walls and faces come down to the ground everywhere, with no gaps
+  const edge = [];
+  poly.forEach((A, i) => { const B = poly[(i + 1) % poly.length], n = Math.floor(Math.hypot(B.x - A.x, B.y - A.y) / 0.3);
+    for (let t = 1; t < n; t++) edge.push({x: A.x + (B.x - A.x) * t / n, y: A.y + (B.y - A.y) * t / n, h: 0}); });
+  const P = poly.concat(edge, cellsArr);
+  const T = delaunay(P);
+  let vol = 0, area = 0, maxH = 0; const used = [];
+  for (const [i,j,k] of T){
+    const A=P[i],B=P[j],C=P[k];
+    if (!inPoly((A.x+B.x+C.x)/3, (A.y+B.y+C.y)/3, poly)) continue;
+    const ar = Math.abs((B.x-A.x)*(C.y-A.y) - (C.x-A.x)*(B.y-A.y)) / 2;
+    area += ar; vol += ar * (A.h+B.h+C.h)/3; used.push([A,B,C]);
+  }
+  P.forEach(p => maxH = Math.max(maxH, p.h));
+  const ys = base.map(p => p[1]), relief = Math.max(...ys) - Math.min(...ys);
+  return {vol, area, maxH, relief, poly, tris: used, nSurf: cells.size, keep};
+}
+
+// ---------- formatting ----------
+const nf = (v, d=1) => v.toLocaleString(undefined, {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtLen = m => { const f = m / FT; return f < 2 ? nf(f * 12, 1) + ' in' : nf(f, 1) + ' ft'; };
+const fmtArea = a => nf(a / (FT * FT), 0) + ' ft²';
+
+// ---------- UI state ----------
+let mode = 'tape', shape = 'cone', scan = null, scanIsSample = false, current = null;
+
+const DIAGRAMS = {
+  cone: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L140 20 L260 100" fill="var(--bg)"/><ellipse cx="140" cy="100" rx="120" ry="12" stroke-dasharray="5 4"/><path d="M20 100 L140 20 L260 100" stroke="var(--accent)" stroke-width="3"/><text x="140" y="14" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">over the top</text><text x="140" y="119" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">circumference at toe</text></svg>`,
+  windrow: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 95 Q40 30 80 30 L200 30 Q240 30 260 95 Z" fill="var(--bg)"/><path d="M20 108 H260" stroke="var(--accent)" stroke-width="3"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">length (toe to toe)</text><text x="140" y="70" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">ridge</text></svg>`,
+  flat: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 100 L80 30 L200 30 L260 100 Z" fill="var(--bg)"/><path d="M80 30 H200" stroke="var(--accent)" stroke-width="3"/><path d="M20 100 H260" stroke="var(--accent)" stroke-width="3"/><path d="M140 30 V100" stroke-dasharray="4 4"/><text x="140" y="22" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">top length × width</text><text x="148" y="70" fill="currentColor" stroke="none" font-size="11">height</text><text x="140" y="116" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">base length × width</text></svg>`,
+  rect: `<svg viewBox="0 0 280 120" width="280" fill="none" stroke="currentColor" stroke-width="2"><path d="M40 70 L90 40 L250 40 L200 70 Z" fill="var(--bg)"/><path d="M40 70 V95 H200 V70 M200 95 L250 65 V40" fill="var(--bg)"/><path d="M40 70 H200 L250 40" stroke="var(--accent)" stroke-width="3"/><text x="120" y="112" fill="currentColor" stroke="none" font-size="11" text-anchor="middle">length</text><text x="250" y="85" fill="currentColor" stroke="none" font-size="11">width</text><text x="34" y="86" fill="currentColor" stroke="none" font-size="11" text-anchor="end">depth</text></svg>`
+};
+const HINTS = {
+  cone: 'Walk a tape around the toe of the pile for the circumference, then throw it over the peak from toe to toe. No need to climb the pile.',
+  windrow: 'Measure length and width at the toe. For height, throw a tape over the ridge from toe to toe across the width.',
+  flat: 'For dozed or bin-shaped piles with a flat top. Measure the toe rectangle and the flat top, plus the height.',
+  rect: 'Straight box: length × width × depth. Use it to work out material needed to cover an area, e.g. a yard at 1 ft deep (switch depth to inches for 4 in, 6 in, etc.).'
+};
+
+function setShape(s){
+  shape = s;
+  document.querySelectorAll('[data-shape]').forEach(b => b.setAttribute('aria-pressed', b.dataset.shape === s));
+  $('coneIn').hidden = s !== 'cone'; $('windIn').hidden = s !== 'windrow'; $('flatIn').hidden = s !== 'flat'; $('rectIn').hidden = s !== 'rect';
+  $('diagram').innerHTML = DIAGRAMS[s]; $('tapeHint').textContent = HINTS[s];
+  render();
+}
+document.querySelectorAll('[data-shape]').forEach(b => b.addEventListener('click', () => setShape(b.dataset.shape)));
+$('coneMethod').addEventListener('change', () => {
+  const ott = $('coneMethod').value === 'ott';
+  $('lC').hidden = $('lO').hidden = !ott; $('lD').hidden = $('lH').hidden = ott; render();
+});
+$('windMethod').addEventListener('change', () => {
+  const ott = $('windMethod').value === 'ott';
+  $('lwO').hidden = !ott; $('lwH').hidden = ott; render();
+});
+document.querySelectorAll('#viewTape input, #refDist').forEach(i => i.addEventListener('input', render));
+
+function setTab(t){
+  mode = t;
+  [['tape','tabTape','viewTape'],['ar','tabAR','viewAR'],['hist','tabHist','viewHist']].forEach(([k,tab,view]) => {
+    $(tab).setAttribute('aria-selected', k === t); $(view).hidden = k !== t;
+  });
+  $('resultCard').hidden = t === 'hist'; $('materialPanel').hidden = t === 'hist';
+  if (t === 'hist') renderHist();
+  render();
+}
+$('tabTape').onclick = () => setTab('tape'); $('tabAR').onclick = () => setTab('ar'); $('tabHist').onclick = () => setTab('hist');
+
+// length input -> metres (maths runs in metres internally)
+const num = id => { const u = $(id + 'U'); return parseFloat($(id).value) * (u && u.value === 'in' ? 1 / 12 : 1) * FT; };
+function render(){
+  if (mode === 'hist') return;
+  const err = $('rErr'); err.hidden = true; current = null;
+  let vol = NaN, info = '', method = '';
+  try {
+    if (mode === 'tape'){
+      let r;
+      if (shape === 'cone') r = Tape.cone({method:$('coneMethod').value, C:num('cC'), O:num('cO'), D:num('cD'), H:num('cH')});
+      if (shape === 'windrow') r = Tape.windrow({L:num('wL'), W:num('wW'), method:$('windMethod').value, O:num('wO'), H:num('wH')});
+      if (shape === 'flat') r = Tape.flat({L:num('fL'), W:num('fW'), l:num('fl'), w:num('fw'), H:num('fH')});
+      if (shape === 'rect') r = Tape.rect({L:num('rL'), W:num('rW'), H:num('rH')});
+      vol = r.vol; info = r.info; method = {cone:'Measure · cone', windrow:'Measure · long pile', flat:'Measure · flat top', rect:'Measure · rectangle'}[shape];
+      if (!isFinite(vol) || vol <= 0) throw 'Fill in every measurement.';
+    } else {
+      if (!scan) throw 'No scan yet. Start an AR scan or load the sample.';
+      // scale check: uniform rescale so the two reference points match the taped distance
+      let k = 1; const ref = scan.ref || [];
+      $('scaleBox').hidden = false;
+      if (ref.length === 2){
+        const arD = Math.hypot(ref[0][0]-ref[1][0], ref[0][1]-ref[1][1], ref[0][2]-ref[1][2]);
+        const tape = num('refDist');
+        if (tape > 0 && arD > 0){
+          k = tape / arD;
+          $('scaleInfo').textContent = `AR measured ${fmtLen(arD)}. Scale corrected by ${((k-1)*100).toFixed(1)}% in length, ${((k**3-1)*100).toFixed(1)}% in volume.`;
+        } else $('scaleInfo').textContent = `AR measured ${fmtLen(arD)} between the scale points. Enter the tape distance to correct for drift.`;
+      } else $('scaleInfo').textContent = 'No scale points in this scan. The volume uses ARCore’s own scale, usually within a few percent.';
+      const S = pts => pts.map(p => p.map(v => v * k));
+      const r = scanVolume(S(scan.base), S(scan.surf));
+      vol = r.vol; method = (scanIsSample ? 'AR scan · sample' : 'AR scan') + (k !== 1 ? ' · scale checked' : '');
+      info = `toe area ${fmtArea(r.area)} · peak ${fmtLen(r.maxH)}`;
+      drawMap(r);
+      if (scan.saved){ $('scaleInfo').textContent = `Saved scan “${scan.saved}”. Any scale correction was applied when it was saved.`; }
+      $('scanStats').textContent = `${scan.base.length} toe points, ${r.nSurf} surface cells, ${r.tris.length} triangles. Ground along the toe rises and falls ${fmtLen(r.relief)}.`;
+      const mm = a => a.map(p => p.map(v => Math.round(v * 1000) / 1000));
+      var keepScan = {base: mm(S(scan.base)), surf: mm(r.keep)};
+    }
+  } catch(e){
+    $('rVol').innerHTML = '—'; $('rTon').innerHTML = '—'; $('rSub').textContent = '';
+    err.textContent = typeof e === 'string' ? e : 'Could not compute: ' + e.message; err.hidden = false; return;
+  }
+  const dens = densityT_m3(), tons = vol * dens;
+  current = {vol, tons, dens, method, info, scan: mode === 'ar' && !scanIsSample ? keepScan : null};
+  const yd = vol / YD3, st = tons / SHORT_TON, d = v => v < 100 ? 1 : 0;
+  $('rVol').innerHTML = nf(yd, d(yd)) + '<small>yd³</small>';
+  $('rTon').innerHTML = isFinite(st) ? nf(st, d(st)) + '<small>tons</small>' : '—';
+  $('rSub').textContent = `${nf(vol / FT ** 3, 0)} ft³ · ${info}`;
+}
+
+// ---------- calibrate & save ----------
+$('calBtn').onclick = () => {
+  const t = parseFloat($('actualTons').value);
+  if (!current || !(t > 0)){ $('calMsg').textContent = 'Enter the weighed amount for the pile measured above.'; return; }
+  const d = t * SHORT_TON / current.vol;
+  calibrated[matSel.value] = {d: +d.toFixed(3), mod: Date.now()}; changed();
+  $('calMsg').textContent = `Saved ${nf(d * YD3 / SHORT_TON, 2)} tons/yd³ for ${matSel.selectedOptions[0].text}.`;
+  showDensity(); render();
+};
+let hist = store.get('sp.hist', []);
+let projects = store.get('sp.projects', []);            // [{id, name, mod}]
+let deleted = store.get('sp.deleted', {});              // id -> time deleted, so a delete isn't undone by another device
+const newId = pre => pre + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+hist.forEach(h => { if (!h.id) h.id = newId('h'); if (h.mod == null) h.mod = 0; });
+projects.forEach(p => { if (p.mod == null) p.mod = 0; });
+function fillProjSelect(sel, val){
+  sel.innerHTML = '';
+  [{id: '', name: 'No project'}].concat(projects).forEach(p => {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o);
+  });
+  sel.value = projects.some(p => p.id === val) ? val : '';
+}
+function refreshProjSel(){ fillProjSelect($('projSel'), store.get('sp.lastProj', '')); }
+$('projSel').addEventListener('change', () => store.set('sp.lastProj', $('projSel').value));
+$('newProjBtn').onclick = () => { $('newProjForm').hidden = false; $('newProjName').focus(); };
+$('newProjCancel').onclick = () => { $('newProjForm').hidden = true; $('newProjName').value = ''; };
+$('newProjForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('newProjName').value.trim(); if (!name) return;
+  const p = {id: newId('p'), name, mod: Date.now()};
+  projects.push(p); store.set('sp.lastProj', p.id); openProj.add(p.id); store.set('sp.openProj', [...openProj]); changed();
+  $('newProjName').value = ''; $('newProjForm').hidden = true; refreshProjSel(); renderHist();
+});
+$('saveBtn').onclick = () => {
+  if (!current) return;
+  hist.unshift({ id: newId('h'), mod: Date.now(), when: new Date().toISOString(), name: $('pileName').value.trim() || 'Unnamed pile', project: $('projSel').value,
+    material: matSel.selectedOptions[0].text, method: current.method, m3: +current.vol.toFixed(2),
+    dens: +current.dens.toFixed(3), t: +current.tons.toFixed(2), info: current.info, ...(current.scan ? {scan: current.scan} : {}) });
+  changed();
+  $('saveBtn').textContent = 'Saved'; setTimeout(() => $('saveBtn').textContent = 'Save', 1500);
+};
+const projName = id => (projects.find(p => p.id === id) || {name: ''}).name;
+const openProj = new Set(store.get('sp.openProj', []));
+function renderHist(){
+  const L = $('histList'); L.innerHTML = '';
+  if (!hist.length && !projects.length){ L.innerHTML = '<p class="hint">Nothing saved yet. Create a project, then measure a pile and tap Save.</p>'; return; }
+  const valid = id => projects.some(p => p.id === id) ? id : '';
+  const groups = projects.map(p => ({...p, items: hist.filter(h => valid(h.project) === p.id)}));
+  const loose = hist.filter(h => !valid(h.project));
+  if (loose.length) groups.push({id: '', name: 'No project', items: loose});
+  groups.forEach(gp => {
+    const box = document.createElement('section'); box.className = 'proj';
+    const m3 = gp.items.reduce((s, h) => s + h.m3, 0), t = gp.items.reduce((s, h) => s + h.t, 0);
+    box.innerHTML = `<div class="proj-head" role="button" tabindex="0"><h3></h3><span class="proj-tot"></span></div>`;
+    // projects start collapsed; which ones you opened is remembered on this device only
+    const key = gp.id || '_none', head = box.querySelector('.proj-head');
+    const setOpen = o => { box.classList.toggle('collapsed', !o); head.setAttribute('aria-expanded', o); };
+    setOpen(openProj.has(key));
+    const toggle = () => { const o = !openProj.has(key); o ? openProj.add(key) : openProj.delete(key); store.set('sp.openProj', [...openProj]); setOpen(o); };
+    head.onclick = toggle; head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } };
+    box.querySelector('h3').textContent = gp.name;
+    box.querySelector('.proj-tot').textContent = gp.items.length
+      ? `${gp.items.length} pile${gp.items.length > 1 ? 's' : ''} · ${nf(m3/YD3,1)} yd³ · ${nf(t/SHORT_TON,1)} tons` : 'No piles yet';
+    gp.items.forEach(h => {
+      const d = document.createElement('div'); d.className = 'item';
+      d.innerHTML = `<b></b><span class="n">${nf(h.m3/YD3,1)} yd³ · ${nf(h.t/SHORT_TON,1)} tons</span><span class="m"></span>
+        <div class="acts"><select aria-label="Move to project"></select><button class="view3d" hidden>3D view</button><button class="del">Delete</button></div>`;
+      d.querySelector('b').textContent = h.name;
+      d.querySelector('.m').textContent = `${new Date(h.when).toLocaleString()} · ${h.material} · ${h.method}`;
+      const sel = d.querySelector('select'); fillProjSelect(sel, valid(h.project));
+      if (h.scan){ const vb = d.querySelector('.view3d'); vb.hidden = false; vb.onclick = () => openSaved(h); }
+      sel.onchange = () => { h.project = sel.value; h.mod = Date.now(); changed(); renderHist(); };
+      const del = d.querySelector('.del');
+      del.onclick = () => {
+        if (del.dataset.armed){ hist.splice(hist.indexOf(h), 1); deleted[h.id] = Date.now(); changed(); renderHist(); }
+        else { del.dataset.armed = 1; del.textContent = 'Tap again to delete'; }
+      };
+      box.appendChild(d);
+    });
+    if (gp.id){
+      const del = document.createElement('button'); del.className = 'del'; del.style.alignSelf = 'flex-end'; del.style.marginTop = '8px';
+      del.textContent = 'Delete project';
+      del.onclick = () => {
+        if (!del.dataset.armed){ del.dataset.armed = 1; del.textContent = 'Tap again. Its piles move to No project'; return; }
+        projects = projects.filter(p => p.id !== gp.id); deleted[gp.id] = Date.now();
+        hist.forEach(h => { if (h.project === gp.id){ h.project = ''; h.mod = Date.now(); } }); changed();
+        refreshProjSel(); renderHist();
+      };
+      box.appendChild(del);
+    }
+    L.appendChild(box);
+  });
+}
+// reopen a saved AR scan on the AR tab: 3D view, stats and export all work as they did after the scan
+function openSaved(h){
+  scan = {base: h.scan.base, surf: h.scan.surf, ref: [], cams: [], when: h.when, saved: h.name}; scanIsSample = false;
+  $('refDist').value = ''; $('pileName').value = h.name; fillProjSelect($('projSel'), h.project);
+  const m = MATERIALS.find(([k, n]) => n === h.material); if (m){ matSel.value = m[0]; showDensity(); }
+  Object.assign(view3d, VIEW0); setTab('ar');
+  $('arResultBox').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+$('copyCsv').onclick = async () => {
+  const q = s => '"' + String(s).replace(/"/g, '""') + '"';
+  const csv = ['date,project,name,material,method,volume_yd3,density_tons_yd3,tons']
+    .concat(hist.map(h => [h.when, q(projName(h.project)), q(h.name), q(h.material), q(h.method), (h.m3/YD3).toFixed(1), (h.dens*YD3/SHORT_TON).toFixed(2), (h.t/SHORT_TON).toFixed(1)].join(','))).join('\n');
+  const ta = $('csvOut'); ta.value = csv; ta.hidden = false;
+  try { await navigator.clipboard.writeText(csv); $('copyCsv').textContent = 'Copied'; }
+  catch(e){ ta.select(); $('copyCsv').textContent = 'Select and copy below'; }
+};
+
+// ---------- sync through one JSON file in a private GitHub repo ----------
+// Each device keeps its own copy; a sync pulls the file, merges by id (newest edit wins,
+// deletes are remembered), then writes it back. A write conflict just merges again.
+let syncCfg = store.get('sp.sync', null), syncBusy = false, syncAgain = false, syncTimer = null;
+const SYNC_FILE = 'stockpile-data.json';
+function saveLocal(){ store.set('sp.hist', hist); store.set('sp.projects', projects); store.set('sp.cal', calibrated); store.set('sp.deleted', deleted); }
+function changed(){
+  saveLocal();
+  if (syncCfg){ clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1200); setSyncStatus('Changes waiting to sync…'); }
+}
+const sortObj = o => Object.fromEntries(Object.keys(o || {}).sort().map(k => [k, o[k]]));
+function snapshotJSON(){
+  return JSON.stringify({ v: 1,
+    projects: [...projects].sort((a, b) => a.id < b.id ? -1 : 1),
+    hist: [...hist].sort((a, b) => a.when === b.when ? (a.id < b.id ? -1 : 1) : (a.when < b.when ? 1 : -1)),
+    cal: sortObj(calibrated), deleted: sortObj(deleted) }, null, 1);
+}
+function mergeById(local, remote){
+  const m = new Map();
+  for (const x of local) m.set(x.id, x);
+  for (const x of remote || []){ const o = m.get(x.id); if (!o || (x.mod || 0) > (o.mod || 0)) m.set(x.id, x); }
+  return [...m.values()].filter(x => !deleted[x.id]);
+}
+const b64enc = s => { const b = new TextEncoder().encode(s); let o = ''; for (let i = 0; i < b.length; i += 0x8000) o += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(o); };
+const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
+function setSyncStatus(msg, bad){ const s = $('syncStatus'); s.textContent = msg; s.className = 'status' + (bad ? ' no' : syncCfg ? ' ok' : ''); }
+const ghHeaders = extra => ({Authorization: 'Bearer ' + syncCfg.token, Accept: 'application/vnd.github+json', ...extra});
+const ghWhy = s => s === 401 ? 'GitHub rejected the token. Check it hasn’t expired.'
+  : s === 403 ? 'The token can’t write to that repository. Give it Contents: Read and write.'
+  : s === 404 ? 'Repository not found. Check the name and that the token includes it.' : 'GitHub error ' + s + '.';
+async function syncNow(){
+  if (!syncCfg) return;
+  if (syncBusy){ syncAgain = true; return; }
+  syncBusy = true; clearTimeout(syncTimer); setSyncStatus('Syncing…');
+  const url = `https://api.github.com/repos/${syncCfg.repo}/contents/${SYNC_FILE}`;
+  try {
+    for (let attempt = 0; ; attempt++){
+      const r = await fetch(url, {headers: ghHeaders(), cache: 'no-store'});
+      let remote = {}, sha, raw = '';
+      if (r.status === 200){
+        const j = await r.json(); sha = j.sha;
+        if (j.content) raw = b64dec(j.content);
+        else {   // over 1 MB (lots of saved scans): GitHub leaves the content out, so fetch it raw
+          const rr = await fetch(url, {headers: ghHeaders({Accept: 'application/vnd.github.raw'}), cache: 'no-store'});
+          if (!rr.ok) throw ghWhy(rr.status); raw = await rr.text();
+        }
+        remote = JSON.parse(raw);
+      }
+      else if (r.status === 404){   // no data file yet is fine, a missing repo is not
+        const rr = await fetch(`https://api.github.com/repos/${syncCfg.repo}`, {headers: ghHeaders(), cache: 'no-store'});
+        if (!rr.ok) throw ghWhy(rr.status);
+      } else throw ghWhy(r.status);
+      Object.assign(deleted, remote.deleted || {});
+      projects = mergeById(projects, remote.projects);
+      hist = mergeById(hist, remote.hist);
+      for (const [k, v] of Object.entries(remote.cal || {})) if (!calibrated[k] || (v.mod || 0) > (calibrated[k].mod || 0)) calibrated[k] = v;
+      saveLocal();
+      const out = snapshotJSON();
+      if (out === raw) break;
+      const w = await fetch(url, {method: 'PUT', headers: ghHeaders({'Content-Type': 'application/json'}),
+        body: JSON.stringify({message: 'Update stockpile data', content: b64enc(out), ...(sha ? {sha} : {})})});
+      if (w.ok) break;
+      if ((w.status === 409 || w.status === 422) && attempt < 2) continue;   // another device saved first: merge again
+      throw ghWhy(w.status);
+    }
+    setSyncStatus('Synced at ' + new Date().toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}));
+  } catch(e){
+    setSyncStatus('Not synced. ' + (typeof e === 'string' ? e : navigator.onLine === false ? 'No signal; it will retry when you’re back online.' : 'Could not reach GitHub (' + e.message + ').'), true);
+  }
+  syncBusy = false;
+  refreshProjSel(); showDensity(); if (mode === 'hist') renderHist();
+  if (syncAgain){ syncAgain = false; syncNow(); }
+}
+function renderSyncUI(){
+  $('syncSetup').hidden = !!syncCfg; $('syncOn').hidden = !syncCfg;
+  if (syncCfg) $('syncRepoName').textContent = syncCfg.repo;
+  else setSyncStatus('Off. Saved piles stay on this device only.');
+}
+$('syncConnect').onclick = () => {
+  const repo = $('syncRepo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/(\.git|\/)$/, '');
+  const token = $('syncToken').value.trim();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !token){ setSyncStatus('Enter the repository as owner/name and paste the token.', true); return; }
+  syncCfg = {repo, token}; store.set('sp.sync', syncCfg); $('syncToken').value = ''; renderSyncUI(); syncNow();
+};
+$('syncNowBtn').onclick = () => syncNow();
+// raw scan export: to the sync repo (scans/…) when sync is on, otherwise a file download
+$('scanExport').onclick = async () => {
+  if (!scan) return;
+  const r3 = a => (a || []).map(p => p.map(v => +v.toFixed(3)));
+  const data = JSON.stringify({app: 'stockpile-tally', when: scan.when || new Date().toISOString(), sample: scanIsSample,
+    depth: scan.depth ?? null, ua: navigator.userAgent, refTapeFt: parseFloat($('refDist').value) || null,
+    pileName: $('pileName').value || null, base: r3(scan.base), surf: r3(scan.surf), ref: r3(scan.ref), cams: r3(scan.cams)});
+  const name = 'scan-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json', msg = $('exportMsg');
+  if (syncCfg){
+    msg.textContent = 'Uploading…';
+    try {
+      const w = await fetch(`https://api.github.com/repos/${syncCfg.repo}/contents/scans/${name}`, {method: 'PUT',
+        headers: ghHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({message: 'Add ' + name, content: b64enc(data)})});
+      if (!w.ok) throw ghWhy(w.status);
+      msg.textContent = `Uploaded to ${syncCfg.repo} as scans/${name}.`; return;
+    } catch(e){ msg.textContent = 'Upload failed (' + (typeof e === 'string' ? e : e.message) + '). Downloading instead.'; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type: 'application/json'}));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  if (!syncCfg) msg.textContent = `Saved ${name} to your downloads.`;
+};
+$('syncOff').onclick = () => { syncCfg = null; store.set('sp.sync', null); renderSyncUI(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
+window.addEventListener('online', () => syncNow());
+
+// ---------- 3D view: shaded surface, painter's algorithm on a 2D canvas ----------
+const VIEW0 = {yaw: -0.7, pitch: 0.55, zoom: 1};
+const view3d = {...VIEW0, r: null};
+function drawMap(r){
+  if (r) view3d.r = r; r = view3d.r; if (!r) return;
+  $('arResultBox').hidden = false; $('sampleTag').hidden = !scanIsSample;
+  const cv = $('map'), dpr = window.devicePixelRatio || 1;
+  const Wpx = Math.round(Math.max(240, cv.clientWidth) * dpr), Hpx = Math.round(Math.max(240, cv.clientHeight) * dpr);
+  if (cv.width !== Wpx || cv.height !== Hpx){ cv.width = Wpx; cv.height = Hpx; }
+  const g = cv.getContext('2d'), CW = cv.width, CH = cv.height, S = Math.min(CW, CH), cs = getComputedStyle(document.documentElement);
+  g.clearRect(0, 0, CW, CH);
+  let cx = 0, cy = 0; r.poly.forEach(p => { cx += p.x; cy += p.y; }); cx /= r.poly.length; cy /= r.poly.length;
+  let span = 0; r.poly.forEach(p => span = Math.max(span, Math.hypot(p.x - cx, p.y - cy)));
+  const sc = S * 0.4 / (span || 1) * view3d.zoom;
+  const cyw = Math.cos(view3d.yaw), syw = Math.sin(view3d.yaw), cp = Math.cos(view3d.pitch), sp = Math.sin(view3d.pitch);
+  // world (x, y = plan, h = up) -> [screenX, screenY, depth]; larger depth = nearer the viewer
+  const P = (x, y, h) => {
+    const dx = x - cx, dz = y - cy, x1 = dx * cyw - dz * syw, z1 = dx * syw + dz * cyw;
+    return [CW / 2 + x1 * sc, CH / 2 + S * 0.08 - (h * cp - z1 * sp) * sc, h * sp + z1 * cp];
+  };
+  const path = pts => { g.beginPath(); pts.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.closePath(); };
+  // ground footprint
+  g.fillStyle = cs.getPropertyValue('--line'); path(r.poly.map(p => P(p.x, p.y, 0))); g.fill();
+  // shaded faces, far to near
+  const Lx = -0.4, Ly = -0.45, Lh = 0.8, Ln = Math.hypot(Lx, Ly, Lh);
+  const faces = r.tris.map(([A, B, C]) => {
+    const ux = B.x - A.x, uy = B.y - A.y, uh = B.h - A.h, vx = C.x - A.x, vy = C.y - A.y, vh = C.h - A.h;
+    let nx = uy * vh - uh * vy, ny = uh * vx - ux * vh, nh = ux * vy - uy * vx;
+    if (nh < 0){ nx = -nx; ny = -ny; nh = -nh; }
+    const lit = Math.max(0, (nx * Lx + ny * Ly + nh * Lh) / (Math.hypot(nx, ny, nh) * Ln || 1));
+    const t = ((A.h + B.h + C.h) / 3) / (r.maxH || 1);
+    const pa = P(A.x, A.y, A.h), pb = P(B.x, B.y, B.h), pc = P(C.x, C.y, C.h);
+    return {pts: [pa, pb, pc], z: (pa[2] + pb[2] + pc[2]) / 3, col: `hsl(${210 - 170 * t} 60% ${18 + 42 * lit + 8 * t}%)`};
+  }).sort((a, b) => a.z - b.z);
+  g.lineWidth = 1;
+  for (const f of faces){ g.fillStyle = g.strokeStyle = f.col; path(f.pts); g.fill(); g.stroke(); }
+  // toe outline and peak marker
+  g.strokeStyle = cs.getPropertyValue('--ink'); g.lineWidth = 2 * dpr; path(r.poly.map(p => P(p.x, p.y, 0))); g.stroke();
+  let top = null; r.tris.forEach(t => t.forEach(p => { if (!top || p.h > top.h) top = p; }));
+  if (top){
+    const q = P(top.x, top.y, top.h), q0 = P(top.x, top.y, 0);
+    g.setLineDash([4 * dpr, 4 * dpr]); g.beginPath(); g.moveTo(q0[0], q0[1]); g.lineTo(q[0], q[1]); g.stroke(); g.setLineDash([]);
+    g.fillStyle = cs.getPropertyValue('--ink'); g.font = `600 ${13 * dpr}px IBM Plex Sans, sans-serif`;
+    g.fillText('peak ' + fmtLen(top.h), q[0] + 8 * dpr, q[1] - 6 * dpr);
+  }
+}
+(function wire3D(){
+  const cv = $('map'), pts = new Map(); let pinch0 = 0, zoom0 = 1, lastTap = 0;
+  const clampZ = z => Math.min(5, Math.max(0.4, z));
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2){ const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); zoom0 = view3d.zoom; }
+    if (pts.size === 1){ const now = Date.now(); if (now - lastTap < 300){ Object.assign(view3d, VIEW0); drawMap(); } lastTap = now; }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 1){
+      view3d.yaw -= (e.clientX - prev[0]) * 0.012;   // drag right turns the pile's front to the right
+      view3d.pitch = Math.min(1.55, Math.max(0.05, view3d.pitch + (e.clientY - prev[1]) * 0.01));
+    } else if (pts.size === 2 && pinch0){
+      const [a, b] = [...pts.values()]; view3d.zoom = clampZ(zoom0 * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch0);
+    }
+    drawMap();
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch0 = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); view3d.zoom = clampZ(view3d.zoom * Math.exp(-e.deltaY * 0.0015)); drawMap(); }, {passive: false});
+  window.addEventListener('resize', () => { if (mode === 'ar') drawMap(); });
+  // full screen: CSS overlay always, plus the browser's real full screen where allowed
+  const wrap = $('mapWrap'), btn = $('fsBtn');
+  const setFs = on => {
+    wrap.classList.toggle('fs', on); btn.textContent = on ? '✕ Close' : '⤢ Full screen';
+    document.body.style.overflow = on ? 'hidden' : '';
+    requestAnimationFrame(() => drawMap());
+  };
+  btn.addEventListener('click', async () => {
+    const on = !wrap.classList.contains('fs');
+    setFs(on);
+    try {
+      if (on && wrap.requestFullscreen) await wrap.requestFullscreen();
+      else if (!on && document.fullscreenElement) await document.exitFullscreen();
+    } catch(e){}
+  });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && wrap.classList.contains('fs')) setFs(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && wrap.classList.contains('fs')) setFs(false); });
+})();
+
+// ---------- sample scan (synthetic, irregular pile on sloping ground) ----------
+function sampleScan(){
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const a = 4.0, b = 3.0, H = 2.5, tilt = (x, z) => 0.03 * x - 0.02 * z + 0.4;   // elliptical cone, V = πabH/3 ≈ 31.4 m³
+  const base = [], surf = [];
+  for (let i = 0; i < 14; i++){ const t = i / 14 * 2 * Math.PI + rnd() * 0.2; const x = a*Math.cos(t), z = b*Math.sin(t); base.push([x, tilt(x,z) + (rnd()-.5)*0.03, z]); }
+  for (let i = 0; i < 1600; i++){
+    const t = rnd() * 2 * Math.PI, rho = Math.sqrt(rnd());
+    const x = a*rho*Math.cos(t), z = b*rho*Math.sin(t);
+    surf.push([x, tilt(x,z) + H*(1-rho) + (rnd()-.5)*0.04, z]);
+  }
+  // simulate 3% tracking drift: everything reads 3% long, scale points are a 5.00 m tape
+  const drift = 1.03, D = pts => pts.map(p => p.map(v => v * drift));
+  return {base: D(base), surf: D(surf), ref: D([[-2.5, tilt(-2.5,-4), -4], [2.5, tilt(2.5,-4), -4]])};
+}
+$('arDemo').onclick = () => { scan = sampleScan(); scanIsSample = true; $('refDistU').value = 'ft'; $('refDist').value = 16.4; Object.assign(view3d, VIEW0); render(); };
+
+// ---------- WebXR walk-around scan ----------
+let xr = null;
+(async function checkAR(){
+  const box = $('arSupport');
+  const notInFrame = window.top === window.self;
+  try {
+    if (navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')){
+      box.className = 'status ok'; box.textContent = 'AR is available on this device.'; $('arStart').disabled = false; return;
+    }
+  } catch(e){}
+  box.className = 'status no';
+  box.textContent = notInFrame
+    ? 'AR is not available here. Use Chrome on an Android phone with Google Play Services for AR installed.'
+    : 'AR needs the app opened on its own web address in Chrome on Android (it can’t run inside this preview). Tape mode works everywhere.';
+})();
+
+$('arStart').onclick = async () => {
+  const overlay = $('arOverlay'); overlay.hidden = false;
+  const glc = document.createElement('canvas');
+  const gl = glc.getContext('webgl', {xrCompatible: true});
+  let session;
+  try {
+    session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay', 'local-floor', 'depth-sensing'], domOverlay: {root: overlay},
+      depthSensing: {usagePreference: ['cpu-optimized'], dataFormatPreference: ['luminance-alpha', 'float32']}});
+  } catch(e){ overlay.hidden = true; $('arSupport').className = 'status no'; $('arSupport').textContent = 'Could not start AR: ' + e.message; return; }
+  session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
+  let refSpace;
+  try { refSpace = await session.requestReferenceSpace('local-floor'); } catch(e){ refSpace = await session.requestReferenceSpace('local'); }
+  const viewer = await session.requestReferenceSpace('viewer');
+  let hts;
+  try { hts = await session.requestHitTestSource({space: viewer, entityTypes: ['point', 'plane']}); }
+  catch(e){ hts = await session.requestHitTestSource({space: viewer}); }
+  // toe and scale points sit on the ground, so aim those at detected floor planes first
+  let htsPlane = null;
+  try { htsPlane = await session.requestHitTestSource({space: viewer, entityTypes: ['plane']}); } catch(e){}
+
+  xr = {session, phase: 'toe', prev: 'toe', base: [], surf: [], ref: [], cams: [], tick: 0, sweep: false, hit: null, frameN: 0,
+        depth: !!(session.enabledFeatures && session.enabledFeatures.includes('depth-sensing') && session.depthUsage === 'cpu-optimized')};
+  // surface points only count inside the toe outline and at least 2 in above the ground fitted through the toe.
+  // Sweep readings go into 4-in cubes; a cube only becomes a kept point once the sensor has hit it in
+  // 3 separate frames (from slightly different spots as you walk). One-off readings - flying pixels, glare,
+  // things passing by - never repeat, so they are dropped. The kept point is the average of all its hits.
+  const VOX = 0.1, NEED = 3;
+  let vox = new Map();
+  const onPile = p => p[1] - xr.baseAt(p[0], p[2]) >= 0.05 && inPoly(p[0], p[2], xr.poly);
+  const acceptSurf = (p, frame) => {
+    if (!onPile(p)) return false;
+    if (frame === undefined){ xr.surf.push(p); return true; }          // a deliberate tap is kept as is
+    const k = p.map(v => Math.round(v / VOX)).join(',');
+    let v = vox.get(k);
+    if (!v){
+      if (vox.size > 60000){ for (const [kk, vv] of vox) if (!vv.pt && frame - vv.f > 90) vox.delete(kk); }
+      v = {s: [0, 0, 0], n: 0, f: -1, c: 0, pt: null}; vox.set(k, v);
+    }
+    v.s[0] += p[0]; v.s[1] += p[1]; v.s[2] += p[2]; v.n++;
+    if (v.f !== frame){ v.f = frame; v.c++; }
+    if (v.pt){ for (let i = 0; i < 3; i++) v.pt[i] = v.s[i] / v.n; }
+    else if (v.c >= NEED && xr.surf.length < 8000){ v.pt = v.s.map(a => a / v.n); xr.surf.push(v.pt); }
+    return true;
+  };
+  const cv = $('arCanvas'), g = cv.getContext('2d');
+  const upd = () => {
+    $('arMeta').textContent = `Toe points ${xr.base.length} · Surface points ${xr.surf.length}${xr.sweep ? ` (${vox.size} cubes checked)` : ''} · ${xr.depth ? 'depth sensor' : 'feature points'}`;
+    $('arNext').hidden = xr.phase !== 'toe'; $('arSweep').hidden = $('arFinish').hidden = $('arClear').hidden = xr.phase !== 'surf';
+    $('arNext').disabled = xr.base.length < 3;
+    $('arRef').textContent = `Scale points ${xr.ref.length}/2`;
+    $('arPhase').textContent = xr.phase === 'ref' ? 'Scale check' : xr.phase === 'toe' ? 'Step 1 · Toe' : 'Step 2 · Surface';
+    $('arMsg').textContent = xr.phase === 'ref'
+      ? `Tap ${xr.ref.length ? 'the other end' : 'one end'} of the tape on the ground.`
+      : xr.phase === 'toe'
+      ? 'Aim the circle at the toe of the pile and tap the screen. Walk all the way around.'
+      : (xr.sweep ? 'Sweeping. Walk slowly around the pile 6–15 ft back, aiming at the faces and the top. A dot only appears once the sensor has seen that spot 3 times, so stray readings are dropped.'
+                  : 'Turn on Sweep and walk around the pile, or tap to add single points on it.');
+    $('arSweep').textContent = 'Sweep: ' + (xr.sweep ? 'on' : 'off');
+  };
+  const addHit = () => {
+    if (!xr.hit) return;
+    const p = xr.hit;
+    if (xr.phase === 'ref'){ xr.ref.push(p); if (xr.ref.length === 2) xr.phase = xr.prev; }
+    else if (xr.phase === 'toe'){
+      // tapping back on the first point closes the outline (it is always closed anyway) and moves on
+      if (xr.base.length >= 3 && Math.hypot(xr.base[0][0] - p[0], xr.base[0][2] - p[2]) < 0.3){
+        if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
+        $('arNext').onclick(); $('arMsg').textContent = 'Outline closed. Now the surface: turn on Sweep and walk around the pile.'; return;
+      }
+      // a second tap on the same spot (within 4 in) adds nothing but noise
+      if (xr.base.some(q => Math.hypot(q[0] - p[0], q[2] - p[2]) < 0.1)){ $('arMsg').textContent = 'Already have a toe point there.'; return; }
+      xr.base.push(p);
+    }
+    else if (!acceptSurf(p)){ upd(); $('arMsg').textContent = 'Skipped: that spot is outside the toe outline or at ground level.'; return; }
+    if (navigator.vibrate) navigator.vibrate(15); upd();
+  };
+  overlay.addEventListener('beforexrselect', e => { if (e.target.closest('#arBottom')) e.preventDefault(); });
+  session.addEventListener('select', addHit);
+  $('arUndo').onclick = () => { (xr.phase === 'ref' ? xr.ref : xr.phase === 'toe' ? xr.base : xr.surf).pop(); upd(); };
+  $('arRef').onclick = () => { if (xr.phase !== 'ref'){ xr.prev = xr.phase; xr.sweep = false; } xr.ref = []; xr.phase = 'ref'; upd(); };
+  $('arNext').onclick = () => { xr.baseAt = makeBase(xr.base); xr.poly = toePoly(xr.base); xr.phase = 'surf'; upd(); };
+  $('arClear').onclick = () => { xr.surf = []; vox = new Map(); upd(); };
+  $('arSweep').onclick = () => { xr.sweep = !xr.sweep; upd(); };
+  $('arCancel').onclick = () => { xr.cancelled = true; session.end(); };
+  $('arFinish').onclick = () => session.end();
+  session.addEventListener('end', () => {
+    overlay.hidden = true;
+    if (!xr.cancelled && xr.base.length >= 3){ scan = {base: xr.base, surf: xr.surf, ref: xr.ref.length === 2 ? xr.ref : [], cams: xr.cams, depth: xr.depth, when: new Date().toISOString()}; scanIsSample = false; $('refDist').value = ''; render(); }
+    xr = null;
+  });
+  upd();
+
+  const project = (p, view) => {           // world point -> screen px via the view's matrices
+    const m = view.transform.inverse.matrix, P = view.projectionMatrix;
+    const v = [0,1,2,3].map(r => m[r]*p[0] + m[4+r]*p[1] + m[8+r]*p[2] + m[12+r]);
+    const c = [0,1,2,3].map(r => P[r]*v[0] + P[4+r]*v[1] + P[8+r]*v[2] + P[12+r]*v[3]);
+    if (c[3] <= 0) return null;
+    return [(c[0]/c[3] * 0.5 + 0.5) * cv.width, (1 - (c[1]/c[3] * 0.5 + 0.5)) * cv.height, -v[2]];   // x, y, distance in front
+  };
+  session.requestAnimationFrame(function frame(t, f){
+    if (!xr) return;
+    session.requestAnimationFrame(frame);
+    const layer = session.renderState.baseLayer;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+    const pose = f.getViewerPose(refSpace); if (!pose) return;
+    if (++xr.tick % 15 === 0){ const q = pose.transform.position; xr.cams.push([q.x, q.y, q.z]); }   // phone path, for diagnosing scans
+    // depth sensor reading at a screen spot (normalized 0–1, top-left origin) -> world point, or null on an edge / no data
+    const view0 = pose.views[0];
+    let di = null;
+    if (xr.depth){ try { di = f.getDepthInformation(view0); } catch(e){ xr.depth = false; } }
+    const depthAt = (nx, ny) => {
+      if (!di) return null;
+      const d = di.getDepthInMeters(nx, ny);
+      if (!(d > 0.3 && d < 6)) return null;
+      // skip readings on an edge (e.g. a wall against the background): the sensor blends the two depths there
+      const e = 0.012, lim = 0.04 * d + 0.03;
+      const nb = [di.getDepthInMeters(nx + e, ny), di.getDepthInMeters(nx - e, ny), di.getDepthInMeters(nx, ny + e), di.getDepthInMeters(nx, ny - e)];
+      if (nb.some(v => !(v > 0) || Math.abs(v - d) > lim)) return null;
+      const P = view0.projectionMatrix, M = view0.transform.matrix;
+      const x = (nx * 2 - 1 + P[8]) * d / P[0], y = (1 - ny * 2 + P[9]) * d / P[5], z = -d;
+      return [M[0]*x + M[4]*y + M[8]*z + M[12], M[1]*x + M[5]*y + M[9]*z + M[13], M[2]*x + M[6]*y + M[10]*z + M[14]];
+    };
+    const firstHit = src => {
+      if (!src) return null;
+      const r = f.getHitTestResults(src); if (!r.length) return null;
+      const hp = r[0].getPose(refSpace); if (!hp) return null;
+      const q = hp.transform.position; return [q.x, q.y, q.z];
+    };
+    // surface: depth sensor first (feature points snap to texture behind plain panels).
+    // toe and scale: detected floor first. Feature points are the fallback for both.
+    // toe on uneven ground: the depth sensor reads the real ground; a detected floor plane is only a flat
+    // approximation, so it comes second
+    let hit = depthAt(0.5, 0.5), how = hit ? 'depth' : '';
+    if (!hit && xr.phase !== 'surf'){ hit = firstHit(htsPlane); if (hit) how = 'floor'; }
+    if (!hit){ hit = firstHit(hts); if (hit) how = 'feature pt'; }
+    xr.hit = hit;
+    $('cross').classList.toggle('hit', !!hit);
+    if (hit){
+      const c = pose.transform.position;
+      $('aimTxt').textContent = fmtLen(Math.hypot(hit[0] - c.x, hit[1] - c.y, hit[2] - c.z)) + ' · ' + how;
+    } else $('aimTxt').textContent = 'no reading';
+    if (xr.sweep && xr.phase === 'surf' && xr.surf.length < 8000 && ++xr.frameN % 2 === 0){
+      if (di){
+        // depth sensor: sample a 9×9 grid over the middle of the screen
+        try {
+          for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++){
+            const p = depthAt(0.15 + 0.7 * i / 8, 0.15 + 0.7 * j / 8); if (p) acceptSurf(p, xr.frameN);
+          }
+        } catch(e){ xr.depth = false; }
+      } else if (xr.hit) acceptSurf(xr.hit, xr.frameN);
+      if (xr.frameN % 10 === 0) upd();
+    }
+    // draw captured points over the camera image
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== innerWidth * dpr){ cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
+    g.clearRect(0, 0, cv.width, cv.height);
+    const view = pose.views[0];
+    // hide dots that are behind something: if the depth sensor sees a nearer surface at that spot on screen,
+    // the dot is on the far side of the pile (or behind a wall) and isn't drawn
+    const W = cv.width, H = cv.height, hidden = (s) => {
+      if (!di) return false;
+      const nx = s[0] / W, ny = s[1] / H;
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return true;
+      let d; try { d = di.getDepthInMeters(nx, ny); } catch(e){ return false; }
+      return d > 0 && s[2] > d + 0.12 + 0.04 * d;
+    };
+    g.fillStyle = di ? 'rgba(242,183,5,.9)' : 'rgba(242,183,5,.55)';
+    for (const p of xr.surf){ const s = project(p, view); if (s && !hidden(s)) g.fillRect(s[0]-2.5*dpr, s[1]-2.5*dpr, 5*dpr, 5*dpr); }
+    // toe outline: always drawn closed and shaded once there are 3 points; while tapping the toe, a dashed
+    // preview runs from the last point to where you're aiming and back to the first
+    const ring = xr.base.slice();
+    const previewing = xr.phase === 'toe' && xr.hit && ring.length >= 1;
+    if (previewing) ring.push(xr.hit);
+    const pts2 = ring.map(p => project(p, view));
+    if (!pts2.every(Boolean)){
+      // some points are behind you: draw just the outline segments that are in view, no shading
+      const n = xr.base.length; g.strokeStyle = '#fff'; g.lineWidth = 3 * dpr; g.beginPath();
+      for (let i = 0; i < n && n >= 2; i++){
+        const a = pts2[i], b = pts2[(i + 1) % n];
+        if (a && b && (i < n - 1 || n >= 3)){ g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+      }
+      g.stroke();
+    } else if (pts2.length >= 2){
+      g.beginPath(); pts2.forEach((s, i) => i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1]));
+      if (pts2.length >= 3){ g.closePath(); g.fillStyle = 'rgba(242,183,5,.22)'; g.fill(); }
+      g.strokeStyle = '#fff'; g.lineWidth = 3 * dpr; g.setLineDash([]);
+      g.beginPath(); pts2.slice(0, xr.base.length).forEach((s, i) => i ? g.lineTo(s[0], s[1]) : g.moveTo(s[0], s[1]));
+      if (!previewing && pts2.length >= 3) g.closePath();
+      g.stroke();
+      if (previewing){
+        const a = pts2[xr.base.length - 1], b = pts2[pts2.length - 1], c = pts2[0];
+        g.setLineDash([8 * dpr, 6 * dpr]); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+        if (xr.base.length >= 2) g.lineTo(c[0], c[1]);
+        g.stroke(); g.setLineDash([]);
+      }
+    }
+    g.fillStyle = '#fff';
+    for (const p of xr.base){ const s = project(p, view); if (s){ g.beginPath(); g.arc(s[0], s[1], 7*dpr, 0, 7); g.fill(); } }
+    g.fillStyle = '#4fc3f7';
+    for (const p of xr.ref){ const s = project(p, view); if (s){ g.beginPath(); g.arc(s[0], s[1], 9*dpr, 0, 7); g.fill(); } }
+  });
+};
+
+// ---------- boot ----------
+window.StockpileMath = {Tape, scanVolume, sampleScan};   // exposed for testing
+showDensity(); refreshProjSel(); setShape('cone'); renderSyncUI(); syncNow();
+</script>
